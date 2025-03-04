@@ -15,11 +15,15 @@ interface SimonProps {
   splineRef: React.MutableRefObject<any>;
 }
 
-// Claves API precargadas
+// Preloaded API Keys
 const OPENAI_API_KEY = "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";
-// Voces más naturales de ElevenLabs (premium)
+
+// ElevenLabs (Premium Voices)
 const ELEVENLABS_API_KEY = "sk_45d3e665137c012665d22e754828f2e4451b6eca216b1bf6";
-const ELEVENLABS_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam - voz más natural
+const ELEVENLABS_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam - most natural voice
+
+// 🔥 Added Assistant ID
+const ASSISTANT_ID = "asst_2c09hq5g7hu4c6s4tSqy1suy";
 
 export function Simon({ splineRef }: SimonProps) {
   const [isListening, setIsListening] = useState(false);
