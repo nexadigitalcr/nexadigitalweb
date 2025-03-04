@@ -1,7 +1,7 @@
 
 import { toast } from "sonner";
 
-interface ChatMessage {
+export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
 }

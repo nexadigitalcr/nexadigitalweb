@@ -2,9 +2,10 @@
 import { useRef, useState, useEffect } from 'react';
 import { Mic, MicOff } from 'lucide-react';
 import { Button } from "@/components/ui/button";
-import { generateChatResponse } from '@/services/openai';
+import { generateChatResponse, ChatMessage } from '@/services/openai';
 import { textToSpeech, cacheAudio, getCachedAudio } from '@/services/elevenlabs';
 import { toast } from 'sonner';
+import '../types/speech-recognition.d.ts';
 
 interface SimonProps {
   splineRef: React.MutableRefObject<any>;
@@ -107,7 +108,7 @@ export function Simon({ splineRef }: SimonProps) {
     try {
       triggerAnimation('thinking');
       
-      const messages = [
+      const messages: ChatMessage[] = [
         { 
           role: 'system', 
           content: 'Eres Simón, un asistente virtual de Nexa Digital. Eres amigable, profesional y siempre dispuesto a ayudar. Mantén tus respuestas breves y concisas, ideales para ser leídas en voz alta. Usa un tono conversacional. Responde en español.'
