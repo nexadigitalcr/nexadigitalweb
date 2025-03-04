@@ -1,5 +1,5 @@
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { generateChatResponse, ChatMessage } from '@/services/openai';
@@ -22,7 +22,7 @@ const OPENAI_API_KEY = "sk-proj-DT5IhigFhJgVrSUyZXcgbjBbQjt_7fyX9_0W5mu8zV2BJdLD
 const ELEVENLABS_API_KEY = "sk_45d3e665137c012665d22e754828f2e4451b6eca216b1bf6";
 const ELEVENLABS_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam - most natural voice
 
-// 🔥 Added Assistant ID
+// Added Assistant ID
 const ASSISTANT_ID = "asst_2c09hq5g7hu4c6s4tSqy1suy";
 
 export function Simon({ splineRef }: SimonProps) {
@@ -33,19 +33,26 @@ export function Simon({ splineRef }: SimonProps) {
   const [initialized, setInitialized] = useState(false);
   const [micPermissionGranted, setMicPermissionGranted] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [processingInput, setProcessingInput] = useState(false);
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const retryTimeoutRef = useRef<number | null>(null);
+  const conversationContext = useRef<ChatMessage[]>([
+    { 
+      role: 'system', 
+      content: 'Eres Simón, un asistente virtual de Nexa Digital. Eres amigable, profesional y siempre dispuesto a ayudar. Mantén tus respuestas breves y concisas, ideales para ser leídas en voz alta (máximo 2-3 oraciones). Usa un tono conversacional y natural. Responde en español.'
+    }
+  ]);
 
-  // Mensaje de bienvenida
-  const welcomeMessage = "Hola, bienvenido a Nexa Digital. Mi nombre es Simón, ¿cómo puedo ayudarte hoy?";
+  // Mensaje de bienvenida corto y directo
+  const welcomeMessage = "Hola, soy Simón de Nexa Digital. ¿En qué puedo ayudarte hoy?";
 
-  // Comprobar y solicitar permisos de micrófono de manera más agresiva
-  const requestMicrophonePermission = async () => {
+  // Comprobar y solicitar permisos de micrófono - mejorado para ser más rápido
+  const requestMicrophonePermission = useCallback(async () => {
     try {
       console.log("Solicitando permisos de micrófono");
-      toast.info("Solicitando acceso al micrófono...");
+      toast.info("Conectando micrófono...");
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -59,7 +66,6 @@ export function Simon({ splineRef }: SimonProps) {
       stream.getTracks().forEach(track => track.stop());
       setMicPermissionGranted(true);
       console.log("Permisos de micrófono concedidos");
-      toast.success("Micrófono conectado correctamente");
       return true;
     } catch (error) {
       console.error("Error al solicitar permisos de micrófono:", error);
@@ -67,19 +73,19 @@ export function Simon({ splineRef }: SimonProps) {
       // Mostrar mensaje específico según el tipo de error
       if (error instanceof DOMException) {
         if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          toast.error("Permiso de micrófono denegado. Por favor, permite el acceso desde la configuración de tu navegador.");
+          toast.error("Permiso de micrófono denegado");
         } else if (error.name === 'NotFoundError') {
-          toast.error("No se detectó ningún micrófono. Por favor, conecta un micrófono.");
+          toast.error("No se detectó micrófono");
         } else {
-          toast.error(`Error de micrófono: ${error.name}`);
+          toast.error(`Error: ${error.name}`);
         }
       } else {
-        toast.error("Para que Simón pueda escucharte, necesitas permitir el acceso al micrófono");
+        toast.error("Error al acceder al micrófono");
       }
       
       return false;
     }
-  };
+  }, []);
 
   useEffect(() => {
     audioRef.current = new Audio();
@@ -96,11 +102,9 @@ export function Simon({ splineRef }: SimonProps) {
             setInitialized(true);
             setTimeout(() => {
               playResponse(welcomeMessage);
-            }, 1000);
-          } else {
-            toast.error("Para interactuar con Simón, por favor permite el acceso al micrófono");
+            }, 500);
           }
-        }, 1500); // Dar tiempo al navegador para mostrar la solicitud
+        }, 800);
       }
     };
     
@@ -109,7 +113,7 @@ export function Simon({ splineRef }: SimonProps) {
     // Función para verificar si estamos en HTTPS
     const checkHttps = () => {
       if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-        toast.error('El reconocimiento de voz requiere una conexión segura (HTTPS). Por favor, usa HTTPS.');
+        toast.error('Esta aplicación requiere HTTPS');
       }
     };
     
@@ -118,16 +122,13 @@ export function Simon({ splineRef }: SimonProps) {
     // Manejar el desbloqueo de audio en Safari/iOS
     const unlockAudio = () => {
       if (audioRef.current) {
-        const playPromise = audioRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              audioRef.current?.pause();
-              document.removeEventListener('touchstart', unlockAudio);
-              document.removeEventListener('click', unlockAudio);
-            })
-            .catch(err => console.error("Error al desbloquear audio:", err));
-        }
+        audioRef.current.play()
+          .then(() => {
+            audioRef.current?.pause();
+            document.removeEventListener('touchstart', unlockAudio);
+            document.removeEventListener('click', unlockAudio);
+          })
+          .catch(err => console.log("Audio no desbloqueado aún:", err));
       }
     };
     
@@ -147,21 +148,21 @@ export function Simon({ splineRef }: SimonProps) {
       document.removeEventListener('touchstart', unlockAudio);
       document.removeEventListener('click', unlockAudio);
     };
-  }, []);
+  }, [requestMicrophonePermission]);
 
-  // Cuando termine de hablar, inicia la escucha
+  // Cuando termine de hablar, inicia la escucha - con mejor manejo de estados
   useEffect(() => {
-    if (initialized && !isSpeaking && !isListening && micPermissionGranted) {
+    if (initialized && !isSpeaking && !isListening && micPermissionGranted && !processingInput) {
       console.log("Iniciando escucha después de hablar");
       const timer = setTimeout(() => {
         startListening();
-      }, 500);
+      }, 300); // Reduced delay for more responsive interactions
       
       return () => clearTimeout(timer);
     }
-  }, [initialized, isSpeaking, isListening, micPermissionGranted]);
+  }, [initialized, isSpeaking, isListening, micPermissionGranted, processingInput]);
 
-  const triggerAnimation = (animationName: string) => {
+  const triggerAnimation = useCallback((animationName: string) => {
     if (splineRef.current) {
       try {
         console.log("Buscando animación:", animationName);
@@ -173,17 +174,15 @@ export function Simon({ splineRef }: SimonProps) {
           console.log("Animación no encontrada:", animationName);
         }
       } catch (error) {
-        console.error("Error al disparar animación Spline:", error);
+        console.error("Error al disparar animación:", error);
       }
-    } else {
-      console.log("splineRef.current no está disponible");
     }
-  };
+  }, [splineRef]);
 
-  const startListening = () => {
+  const startListening = useCallback(() => {
     // Verificar si el reconocimiento de voz está disponible
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      toast.error('Tu navegador no soporta reconocimiento de voz. Intenta con Chrome, Edge o Safari.');
+      toast.error('Tu navegador no soporta reconocimiento de voz');
       return;
     }
 
@@ -192,7 +191,7 @@ export function Simon({ splineRef }: SimonProps) {
       console.log("No hay permiso de micrófono, solicitando...");
       requestMicrophonePermission().then(granted => {
         if (granted) {
-          setTimeout(() => startListening(), 500);
+          setTimeout(() => startListening(), 300);
         }
       });
       return;
@@ -212,8 +211,8 @@ export function Simon({ splineRef }: SimonProps) {
     try {
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.lang = 'es-ES';
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = false;
+      recognitionRef.current.continuous = false; // Changed to false for more immediate results
+      recognitionRef.current.interimResults = true; // Changed to true for real-time feedback
       recognitionRef.current.maxAlternatives = 1;
 
       recognitionRef.current.onstart = () => {
@@ -224,44 +223,47 @@ export function Simon({ splineRef }: SimonProps) {
       };
 
       recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-        const transcript = event.results[0][0].transcript;
-        console.log("Texto reconocido:", transcript);
-        setTranscript(transcript);
-        processSpeech(transcript);
+        const currentTranscript = Array.from(event.results)
+          .map(result => result[0].transcript)
+          .join('');
+        
+        console.log("Transcripción:", currentTranscript);
+        setTranscript(currentTranscript);
+        
+        // Process final results immediately
+        if (event.results[0].isFinal) {
+          processSpeech(currentTranscript);
+          recognitionRef.current?.stop(); // Stop to immediately process
+        }
       };
 
       recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.error('Error de reconocimiento de voz:', event.error);
+        console.error('Error de reconocimiento:', event.error);
         setIsListening(false);
         triggerAnimation('idle');
         
-        // Estrategia de reintento basada en el tipo de error
         if (event.error === 'not-allowed') {
-          toast.error("Permiso de micrófono denegado. Por favor, permite el acceso al micrófono.");
+          toast.error("Permiso de micrófono denegado");
           setMicPermissionGranted(false);
-          // Intentar solicitar permisos de micrófono de nuevo después de un tiempo
-          setTimeout(() => requestMicrophonePermission(), 3000);
-        } else if (event.error === 'audio-capture') {
-          toast.error("No se pudo capturar audio. Verifica que tu micrófono esté conectado y funcionando.");
-          // Intentar solicitar permisos de nuevo
           setTimeout(() => requestMicrophonePermission(), 2000);
+        } else if (event.error === 'audio-capture') {
+          toast.error("No se pudo capturar audio");
+          setTimeout(() => requestMicrophonePermission(), 1500);
         } else if (event.error === 'no-speech') {
           console.log("No se detectó voz, reiniciando...");
-          // Reintentar rápidamente para errores de "no-speech"
           if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
           retryTimeoutRef.current = window.setTimeout(() => {
-            if (!isSpeaking && micPermissionGranted) {
+            if (!isSpeaking && micPermissionGranted && !processingInput) {
               startListening();
             }
-          }, 1000);
+          }, 800);
         } else {
-          // Para otros errores, esperar un poco más antes de reintentar
           if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
           retryTimeoutRef.current = window.setTimeout(() => {
-            if (!isSpeaking && micPermissionGranted) {
+            if (!isSpeaking && micPermissionGranted && !processingInput) {
               startListening();
             }
-          }, 2000);
+          }, 1500);
         }
       };
 
@@ -269,101 +271,103 @@ export function Simon({ splineRef }: SimonProps) {
         console.log("Reconocimiento de voz finalizado");
         setIsListening(false);
         
-        // No reiniciar la escucha si está hablando
-        if (isSpeaking) {
-          console.log("No reiniciando escucha porque está hablando");
+        if (isSpeaking || processingInput) {
+          console.log("No reiniciando escucha porque está procesando o hablando");
           return;
         }
         
-        // Reiniciar la escucha automáticamente después de un corto periodo
         if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = window.setTimeout(() => {
-          if (!isSpeaking && micPermissionGranted) {
+          if (!isSpeaking && micPermissionGranted && !processingInput) {
             console.log("Reiniciando escucha automáticamente");
             startListening();
           }
-        }, 1000);
+        }, 800);
       };
 
       console.log("Iniciando reconocimiento de voz");
       recognitionRef.current.start();
     } catch (error) {
-      console.error("Error crítico al iniciar reconocimiento de voz:", error);
-      toast.error("Error al iniciar el reconocimiento de voz. Intenta recargar la página.");
+      console.error("Error crítico:", error);
+      toast.error("Error de reconocimiento de voz");
       
-      // Si hay un error al iniciar, intentamos reiniciar después de un tiempo
       setTimeout(() => {
-        if (!isSpeaking && micPermissionGranted) {
+        if (!isSpeaking && micPermissionGranted && !processingInput) {
           startListening();
         }
-      }, 3000);
+      }, 2000);
     }
-  };
+  }, [isSpeaking, micPermissionGranted, processingInput, requestMicrophonePermission, triggerAnimation]);
 
-  const processSpeech = async (text: string) => {
+  const processSpeech = useCallback(async (text: string) => {
     if (!text.trim()) return;
-
+    
+    setProcessingInput(true);
     try {
       triggerAnimation('thinking');
       
-      const messages: ChatMessage[] = [
-        { 
-          role: 'system', 
-          content: 'Eres Simón, un asistente virtual de Nexa Digital. Eres amigable, profesional y siempre dispuesto a ayudar. Mantén tus respuestas breves y concisas, ideales para ser leídas en voz alta. Usa un tono conversacional y natural. Responde en español.'
-        },
-        { role: 'user', content: text }
-      ];
+      // Agregar mensaje del usuario al contexto de la conversación
+      conversationContext.current.push({ role: 'user', content: text });
+      
+      // Mantener solo los últimos 5 mensajes para contexto (para respuestas más rápidas)
+      if (conversationContext.current.length > 6) { // sistema + 5 últimos mensajes
+        conversationContext.current = [
+          conversationContext.current[0], // Mantener mensaje del sistema
+          ...conversationContext.current.slice(-5) // Últimos 5 mensajes
+        ];
+      }
 
       console.log("Enviando mensaje a OpenAI:", text);
-      const aiResponse = await generateChatResponse(messages, OPENAI_API_KEY);
-      console.log("Respuesta recibida de OpenAI:", aiResponse);
-      setResponse(aiResponse);
+      const aiResponse = await generateChatResponse(conversationContext.current, OPENAI_API_KEY);
+      console.log("Respuesta recibida:", aiResponse);
       
+      // Agregar respuesta del asistente al contexto
+      conversationContext.current.push({ role: 'assistant', content: aiResponse });
+      
+      setResponse(aiResponse);
       playResponse(aiResponse);
     } catch (error) {
-      console.error('Error al procesar el texto:', error);
+      console.error('Error al procesar:', error);
       triggerAnimation('idle');
+      setProcessingInput(false);
       
-      // Si hay un error, reiniciamos la escucha
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
           startListening();
         }
       }, 1000);
     }
-  };
+  }, [triggerAnimation]);
 
-  const playResponse = async (text: string) => {
+  const playResponse = useCallback(async (text: string) => {
     if (muted) {
-      console.log("Audio silenciado, no reproduciendo respuesta");
+      console.log("Audio silenciado");
       setResponse(text);
       setIsSpeaking(false);
       triggerAnimation('idle');
+      setProcessingInput(false);
       
-      // Reiniciar la escucha después de "hablar" en silencio
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
           startListening();
         }
-      }, 1000);
+      }, 500);
       return;
     }
     
     try {
-      console.log("Reproduciendo respuesta:", text);
+      console.log("Reproduciendo respuesta");
       setIsSpeaking(true);
       triggerAnimation('talking');
       
       let audioData = getCachedAudio(text);
       
       if (!audioData) {
-        console.log("Audio no en caché, generando nuevo...");
+        console.log("Generando nuevo audio");
         audioData = await textToSpeech(text, ELEVENLABS_VOICE_ID, ELEVENLABS_API_KEY);
         if (audioData) {
           cacheAudio(text, audioData);
         }
-      } else {
-        console.log("Usando audio en caché");
       }
       
       if (audioData && audioRef.current) {
@@ -372,17 +376,17 @@ export function Simon({ splineRef }: SimonProps) {
         
         audioRef.current.src = url;
         audioRef.current.onended = () => {
-          console.log("Reproducción de audio finalizada");
+          console.log("Reproducción finalizada");
           setIsSpeaking(false);
           URL.revokeObjectURL(url);
           triggerAnimation('idle');
+          setProcessingInput(false);
           
-          // Reiniciar la escucha después de hablar
           setTimeout(() => {
             if (!isListening && micPermissionGranted) {
               startListening();
             }
-          }, 500);
+          }, 300);
         };
         
         try {
@@ -390,114 +394,111 @@ export function Simon({ splineRef }: SimonProps) {
           
           if (playPromise !== undefined) {
             playPromise.catch(error => {
-              console.error("Error al reproducir audio:", error);
+              console.error("Error al reproducir:", error);
               setIsSpeaking(false);
               triggerAnimation('idle');
+              setProcessingInput(false);
               
               if (error.name === 'NotAllowedError') {
-                console.log("Reproducción automática bloqueada. Solicitando interacción del usuario.");
-                toast.error("Haz clic en la pantalla para permitir que Simón hable", {
-                  duration: 5000,
+                toast.error("Haz clic para activar el audio", {
+                  duration: 3000,
                 });
                 
-                // Agregar un listener para iniciar la reproducción con interacción del usuario
                 const unlockAudio = () => {
                   if (audioRef.current) {
                     audioRef.current.play()
-                      .then(() => console.log("Audio desbloqueado y reproduciendo"))
-                      .catch(err => console.error("Error después de desbloqueo:", err));
+                      .then(() => console.log("Audio desbloqueado"))
+                      .catch(err => console.error("Error post-desbloqueo:", err));
                     document.removeEventListener('click', unlockAudio);
                   }
                 };
                 
                 document.addEventListener('click', unlockAudio);
               } else {
-                // Si hay un error al reproducir, reiniciamos la escucha
                 setTimeout(() => {
                   if (!isListening && micPermissionGranted) {
                     startListening();
                   }
-                }, 1000);
+                }, 800);
               }
             });
           }
         } catch (error) {
-          console.error("Error crítico al reproducir audio:", error);
+          console.error("Error crítico al reproducir:", error);
           setIsSpeaking(false);
           triggerAnimation('idle');
+          setProcessingInput(false);
           
-          // Si hay un error al reproducir, reiniciamos la escucha
           setTimeout(() => {
             if (!isListening && micPermissionGranted) {
               startListening();
             }
-          }, 1000);
+          }, 800);
         }
       } else {
-        console.error("No se pudo obtener audio para reproducir");
+        console.error("No se pudo obtener audio");
         setIsSpeaking(false);
         triggerAnimation('idle');
+        setProcessingInput(false);
         
-        // Si hay un error al reproducir, reiniciamos la escucha
         setTimeout(() => {
           if (!isListening && micPermissionGranted) {
             startListening();
           }
-        }, 1000);
+        }, 800);
       }
     } catch (error) {
       console.error('Error al reproducir respuesta:', error);
       setIsSpeaking(false);
       triggerAnimation('idle');
+      setProcessingInput(false);
       
-      // Si hay un error, reiniciamos la escucha
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
           startListening();
         }
-      }, 1000);
+      }, 800);
     }
-  };
+  }, [muted, triggerAnimation]);
 
-  const handleManualStart = async () => {
+  const handleManualStart = useCallback(async () => {
     if (!initialized) {
       const hasPermission = await requestMicrophonePermission();
       if (hasPermission) {
         setInitialized(true);
         playResponse(welcomeMessage);
       }
-    } else if (!isListening && !isSpeaking) {
+    } else if (!isListening && !isSpeaking && !processingInput) {
       startListening();
     }
-  };
+  }, [initialized, isListening, isSpeaking, processingInput, playResponse, requestMicrophonePermission, startListening, welcomeMessage]);
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     setMuted(!muted);
     if (isSpeaking && !muted) {
-      // Si estamos silenciando mientras habla, detenemos el audio
       if (audioRef.current) {
         audioRef.current.pause();
         setIsSpeaking(false);
         triggerAnimation('idle');
+        setProcessingInput(false);
         
-        // Reiniciar la escucha
         setTimeout(() => {
           if (!isListening && micPermissionGranted) {
             startListening();
           }
-        }, 500);
+        }, 300);
       }
     }
-    toast.info(muted ? "Audio activado" : "Audio silenciado");
-  };
+    toast.info(muted ? "Audio activado" : "Audio silenciado", { duration: 1500 });
+  }, [muted, isSpeaking, micPermissionGranted, isListening, triggerAnimation]);
 
   return (
     <div className="flex flex-col gap-3 p-4" onClick={handleManualStart}>
       <div className="flex items-center justify-between">
-        <div className={`rounded-full w-3 h-3 ${isListening ? 'bg-red-500 animate-pulse' : isSpeaking ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`}></div>
+        <div className={`rounded-full w-3 h-3 ${isListening ? 'bg-red-500 animate-pulse' : isSpeaking ? 'bg-blue-500 animate-pulse' : processingInput ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`}></div>
         
         <div className="text-sm text-white/80">
-          {isListening ? 'Escuchando...' : isSpeaking ? 'Hablando...' : micPermissionGranted ? 'Listo para escuchar' : 'Necesita permiso de micrófono'}
+          {isListening ? 'Escuchando...' : isSpeaking ? 'Hablando...' : processingInput ? 'Procesando...' : micPermissionGranted ? 'Listo' : 'Necesita micrófono'}
         </div>
         
         <Button 

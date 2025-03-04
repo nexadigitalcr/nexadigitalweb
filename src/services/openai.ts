@@ -1,3 +1,4 @@
+
 import { toast } from "sonner";
 
 export interface ChatMessage {
@@ -18,11 +19,11 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
       body: JSON.stringify({
         model: 'gpt-4o',
         messages,
-        max_tokens: 1000,  // Increased to 1000 for more complete responses
+        max_tokens: 500,  // Reduced to improve response speed
         stream: true,
-        temperature: 0.3,
-        presence_penalty: 0.6,
-        frequency_penalty: 0.5
+        temperature: 0.2,  // Lower temperature for more consistent, faster responses
+        presence_penalty: 0.3,  // Reduced for faster responses
+        frequency_penalty: 0.3   // Reduced for faster responses
       })
     });
 
@@ -32,7 +33,7 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
       throw new Error(errorData.error?.message || 'Error generating response');
     }
 
-    // ✅ REAL-TIME STREAM PROCESSING
+    // Stream processing
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let resultText = '';
@@ -42,18 +43,16 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
       if (done) break;
 
       const decodedValue = decoder.decode(value, { stream: true });
-
-      // 🔹 Procesar cada línea del stream
-      const jsonChunks = decodedValue.split("\n").filter(line => line.startsWith("data: "));
+      const jsonChunks = decodedValue.split("\n").filter(line => line.startsWith("data: ") && line !== "data: [DONE]");
+      
       for (const chunk of jsonChunks) {
         try {
           const jsonData = JSON.parse(chunk.replace("data: ", "").trim());
-
-          // 🔥 Extraer solo el texto generado
           if (jsonData.choices && jsonData.choices[0].delta.content) {
             resultText += jsonData.choices[0].delta.content;
           }
         } catch (error) {
+          // Continue even if one chunk fails to parse
           console.error("Error processing stream chunk:", error);
         }
       }
@@ -64,6 +63,6 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
   } catch (error) {
     console.error('Error calling OpenAI:', error);
     toast.error('Error generating AI response');
-    return "Sorry, an error occurred while processing your request. Please try again.";
+    return "Lo siento, ha ocurrido un error. Por favor, inténtalo de nuevo.";
   }
 }

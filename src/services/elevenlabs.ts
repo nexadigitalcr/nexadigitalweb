@@ -3,7 +3,21 @@ import { toast } from "sonner";
 
 export async function textToSpeech(text: string, voiceId: string, apiKey: string): Promise<ArrayBuffer | null> {
   try {
-    console.log("Llamando a ElevenLabs API para síntesis de voz");
+    console.log("Calling ElevenLabs API for voice synthesis");
+    
+    // Optimize text for speech synthesis
+    const optimizedText = text
+      .replace(/\s+/g, ' ')        // Replace multiple spaces with a single space
+      .replace(/\n+/g, ' ')        // Replace newlines with spaces
+      .trim();                     // Remove leading/trailing whitespace
+    
+    // Use smaller chunks for faster response
+    const maxChunkLength = 300;
+    
+    // If text is too long, only synthesize the first part
+    const speechText = optimizedText.length > maxChunkLength 
+      ? optimizedText.substring(0, maxChunkLength) + '...' 
+      : optimizedText;
     
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
@@ -12,12 +26,12 @@ export async function textToSpeech(text: string, voiceId: string, apiKey: string
         'xi-api-key': apiKey
       },
       body: JSON.stringify({
-        text,
-        model_id: 'eleven_multilingual_v2',
+        text: speechText,
+        model_id: 'eleven_turbo_v2',  // Using faster Turbo model for quicker synthesis
         voice_settings: {
-          stability: 0.3,          // Lower stability for more natural variations
-          similarity_boost: 0.85,  // Higher similarity for better voice matching
-          style: 0.5,              // Add some style variation
+          stability: 0.4,          // Higher stability for more consistent output
+          similarity_boost: 0.75,  // Good balance of similarity and performance
+          style: 0.2,              // Lower style for more natural speech
           use_speaker_boost: true  // Improve clarity
         }
       })
@@ -29,27 +43,40 @@ export async function textToSpeech(text: string, voiceId: string, apiKey: string
       throw new Error('Error generating speech');
     }
 
-    console.log("Síntesis de voz exitosa");
+    console.log("Voice synthesis successful");
     return await response.arrayBuffer();
   } catch (error) {
-    console.error('Error llamando a ElevenLabs:', error);
-    toast.error('Error generando voz');
+    console.error('Error calling ElevenLabs:', error);
+    toast.error('Error generating voice');
     return null;
   }
 }
 
-// Cache para almacenar datos de audio y evitar llamadas API repetidas
-const audioCache = new Map<string, ArrayBuffer>();
+// Audio cache with size limit to prevent memory issues
+const MAX_CACHE_SIZE = 20;
+const audioCache = new Map<string, {data: ArrayBuffer, timestamp: number}>();
 
 export function cacheAudio(text: string, audioData: ArrayBuffer) {
-  console.log("Guardando audio en caché");
-  audioCache.set(text, audioData);
+  console.log("Saving audio to cache");
+  
+  // Remove oldest entries if cache is too large
+  if (audioCache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = [...audioCache.entries()]
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)[0][0];
+    audioCache.delete(oldestKey);
+  }
+  
+  audioCache.set(text, {
+    data: audioData,
+    timestamp: Date.now()
+  });
 }
 
 export function getCachedAudio(text: string): ArrayBuffer | undefined {
   const cached = audioCache.get(text);
   if (cached) {
-    console.log("Audio encontrado en caché");
+    console.log("Audio found in cache");
+    return cached.data;
   }
-  return cached;
+  return undefined;
 }

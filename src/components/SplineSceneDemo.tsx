@@ -15,32 +15,63 @@ export function SplineSceneBasic() {
   const splineRef = useRef(null);
 
   useEffect(() => {
-    // Mostrar mensajes informativos importantes para los usuarios
-    toast.info(
-      'Haz clic para comenzar. Para interactuar con Simón, permite el acceso al micrófono cuando te lo solicite.',
-      { duration: 8000 }
-    );
-    
-    toast.info(
-      'Asegúrate de que estés usando un navegador moderno (Chrome, Edge o Safari) para mejor experiencia.',
-      { duration: 8000, id: 'browser-info' }
-    );
+    // User guide messages
+    const showUserGuide = () => {
+      // First toast - how to get started
+      toast.info(
+        'Haz clic para interactuar con Simón',
+        { duration: 4000, id: 'start-guide' }
+      );
+      
+      // Second toast - browser compatibility
+      setTimeout(() => {
+        toast.info(
+          'Para mejor experiencia, usa Chrome, Edge o Safari',
+          { duration: 3000, id: 'browser-guide' }
+        );
+      }, 4500);
+      
+      // Third toast - speak clearly
+      setTimeout(() => {
+        toast.info(
+          'Habla claro y directo para una mejor experiencia',
+          { duration: 3000, id: 'speech-guide' }
+        );
+      }, 8000);
+    };
 
-    // Verificar si estamos en HTTPS
+    // Check HTTPS
     if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
       toast.error(
-        'Esta aplicación requiere HTTPS para funcionar correctamente. Por favor, usa una conexión segura.',
-        { duration: 0 } // Permanente
+        'Esta aplicación requiere HTTPS para funcionar correctamente',
+        { duration: 8000 }
       );
     }
+    
+    showUserGuide();
+    
+    // One-time audio unlock for iOS/Safari
+    const unlockAudio = () => {
+      const audio = new Audio();
+      audio.play().catch(() => {
+        // Silence catch - just attempting to unlock
+      });
+      document.removeEventListener('click', unlockAudio);
+    };
+    
+    document.addEventListener('click', unlockAudio, { once: true });
+    
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+    };
   }, []);
 
   const onLoad = (spline: any) => {
     splineRef.current = spline;
     setSplineLoaded(true);
-    console.log("Spline scene cargada correctamente", spline);
+    console.log("Spline scene cargada correctamente");
     
-    // Intentar activar animación inicial si existe
+    // Intentar activar animación inicial
     try {
       if (spline) {
         const idleObj = spline.findObjectByName('idle');
@@ -54,6 +85,12 @@ export function SplineSceneBasic() {
     } catch (error) {
       console.error("Error al activar animación inicial:", error);
     }
+    
+    // Indicate when Spline is ready
+    toast.success('Simón está listo para conversar', { 
+      duration: 3000,
+      id: 'spline-loaded'
+    });
   };
 
   return (
@@ -80,16 +117,18 @@ export function SplineSceneBasic() {
 
         {/* Right content - Simón (3D interactive element) */}
         <div className="flex-1 relative">
-          <div className="absolute top-4 left-4 z-20 text-white text-sm font-medium bg-blue-500/20 px-3 py-1 rounded-full">
+          <div className="absolute top-4 left-4 z-20 text-white text-sm font-medium bg-blue-500/30 px-3 py-1 rounded-full backdrop-blur-sm">
             Simón
           </div>
+          
           <SplineScene 
             scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
             className="w-full h-full"
             onLoad={onLoad}
           />
+          
           {splineLoaded && (
-            <div className="absolute bottom-4 right-4 z-20 w-80 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden">
+            <div className="absolute bottom-4 right-4 z-20 w-80 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border border-slate-800">
               <Simon splineRef={splineRef} />
             </div>
           )}
