@@ -1,12 +1,14 @@
-
 import { useRef, useState, useEffect } from 'react';
 import { Mic, MicOff } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { generateChatResponse, ChatMessage } from '@/services/openai';
 import { textToSpeech, cacheAudio, getCachedAudio } from '@/services/elevenlabs';
 import { toast } from 'sonner';
-// Import types explicitly - this ensures TypeScript recognizes them
-import type {} from '../types/speech-recognition.d.ts';
+import type { 
+  SpeechRecognition, 
+  SpeechRecognitionEvent, 
+  SpeechRecognitionErrorEvent 
+} from '../types/speech-recognition.d.ts';
 
 interface SimonProps {
   splineRef: React.MutableRefObject<any>;
@@ -23,7 +25,6 @@ export function Simon({ splineRef }: SimonProps) {
   });
   const [voiceId, setVoiceId] = useState(localStorage.getItem('elevenlabs_voice_id') || 'N2lVS1w4EtoT3dr4eOWO'); // Default to Callum voice
   
-  // Use a more specific type to satisfy TypeScript
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -37,7 +38,6 @@ export function Simon({ splineRef }: SimonProps) {
     };
   }, []);
 
-  // Interaction with Spline object
   const triggerAnimation = (animationName: string) => {
     if (splineRef.current) {
       try {
@@ -121,7 +121,6 @@ export function Simon({ splineRef }: SimonProps) {
       const aiResponse = await generateChatResponse(messages, apiKeys.openai);
       setResponse(aiResponse);
       
-      // Play the response
       playResponse(aiResponse);
     } catch (error) {
       console.error('Error processing speech:', error);

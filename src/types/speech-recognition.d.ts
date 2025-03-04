@@ -62,4 +62,12 @@ declare global {
   }
 }
 
-export {};
+// Export the types to make them available for import
+export type {
+  SpeechRecognition,
+  SpeechRecognitionEvent,
+  SpeechRecognitionErrorEvent,
+  SpeechRecognitionResult,
+  SpeechRecognitionResultList,
+  SpeechRecognitionAlternative
+};
