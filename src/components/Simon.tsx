@@ -18,9 +18,9 @@ interface SimonProps {
 // Preloaded API Keys
 const OPENAI_API_KEY = "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";
 
-// ElevenLabs (Premium Voices)
+// ElevenLabs (Latin Spanish Voice)
 const ELEVENLABS_API_KEY = "sk_45d3e665137c012665d22e754828f2e4451b6eca216b1bf6";
-const ELEVENLABS_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam - most natural voice
+const ELEVENLABS_VOICE_ID = "dlGxemPxFMTY7iXagmOj"; // Updated to the Latin Spanish voice ID provided
 
 // Added Assistant ID
 const ASSISTANT_ID = "asst_2c09hq5g7hu4c6s4tSqy1suy";
@@ -28,25 +28,44 @@ const ASSISTANT_ID = "asst_2c09hq5g7hu4c6s4tSqy1suy";
 export function Simon({ splineRef }: SimonProps) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [response, setResponse] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [micPermissionGranted, setMicPermissionGranted] = useState(false);
   const [muted, setMuted] = useState(false);
   const [processingInput, setProcessingInput] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'listening' | 'processing' | 'speaking'>('idle');
+  const [dots, setDots] = useState('');
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const retryTimeoutRef = useRef<number | null>(null);
+  const dotsIntervalRef = useRef<number | null>(null);
   const conversationContext = useRef<ChatMessage[]>([
     { 
       role: 'system', 
-      content: 'Eres Simón, un asistente virtual de Nexa Digital. Eres amigable, profesional y siempre dispuesto a ayudar. Mantén tus respuestas breves y concisas, ideales para ser leídas en voz alta (máximo 2-3 oraciones). Usa un tono conversacional y natural. Responde en español.'
+      content: 'Eres Simón, un asistente virtual de Nexa Digital. Eres amigable, profesional y siempre dispuesto a ayudar. Mantén tus respuestas breves y concisas, ideales para ser leídas en voz alta (máximo 2-3 oraciones). Usa un tono conversacional y natural. Responde en español de América Latina, usando expresiones naturales y coloquiales.'
     }
   ]);
 
   // Mensaje de bienvenida corto y directo
   const welcomeMessage = "Hola, soy Simón de Nexa Digital. ¿En qué puedo ayudarte hoy?";
+
+  // Animating dots for status indicators
+  useEffect(() => {
+    if (status !== 'idle') {
+      if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
+      
+      dotsIntervalRef.current = window.setInterval(() => {
+        setDots((prev) => {
+          if (prev.length >= 3) return '';
+          return prev + '.';
+        });
+      }, 500);
+      
+      return () => {
+        if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
+      };
+    }
+  }, [status]);
 
   // Comprobar y solicitar permisos de micrófono - mejorado para ser más rápido
   const requestMicrophonePermission = useCallback(async () => {
@@ -145,6 +164,9 @@ export function Simon({ splineRef }: SimonProps) {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
       }
+      if (dotsIntervalRef.current) {
+        clearInterval(dotsIntervalRef.current);
+      }
       document.removeEventListener('touchstart', unlockAudio);
       document.removeEventListener('click', unlockAudio);
     };
@@ -218,7 +240,7 @@ export function Simon({ splineRef }: SimonProps) {
       recognitionRef.current.onstart = () => {
         console.log("Reconocimiento de voz iniciado");
         setIsListening(true);
-        setTranscript('');
+        setStatus('listening');
         triggerAnimation('listening');
       };
 
@@ -228,7 +250,6 @@ export function Simon({ splineRef }: SimonProps) {
           .join('');
         
         console.log("Transcripción:", currentTranscript);
-        setTranscript(currentTranscript);
         
         // Process final results immediately
         if (event.results[0].isFinal) {
@@ -240,6 +261,7 @@ export function Simon({ splineRef }: SimonProps) {
       recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Error de reconocimiento:', event.error);
         setIsListening(false);
+        setStatus('idle');
         triggerAnimation('idle');
         
         if (event.error === 'not-allowed') {
@@ -290,6 +312,7 @@ export function Simon({ splineRef }: SimonProps) {
     } catch (error) {
       console.error("Error crítico:", error);
       toast.error("Error de reconocimiento de voz");
+      setStatus('idle');
       
       setTimeout(() => {
         if (!isSpeaking && micPermissionGranted && !processingInput) {
@@ -303,6 +326,7 @@ export function Simon({ splineRef }: SimonProps) {
     if (!text.trim()) return;
     
     setProcessingInput(true);
+    setStatus('processing');
     try {
       triggerAnimation('thinking');
       
@@ -324,12 +348,12 @@ export function Simon({ splineRef }: SimonProps) {
       // Agregar respuesta del asistente al contexto
       conversationContext.current.push({ role: 'assistant', content: aiResponse });
       
-      setResponse(aiResponse);
       playResponse(aiResponse);
     } catch (error) {
       console.error('Error al procesar:', error);
       triggerAnimation('idle');
       setProcessingInput(false);
+      setStatus('idle');
       
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
@@ -342,10 +366,10 @@ export function Simon({ splineRef }: SimonProps) {
   const playResponse = useCallback(async (text: string) => {
     if (muted) {
       console.log("Audio silenciado");
-      setResponse(text);
       setIsSpeaking(false);
       triggerAnimation('idle');
       setProcessingInput(false);
+      setStatus('idle');
       
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
@@ -358,6 +382,7 @@ export function Simon({ splineRef }: SimonProps) {
     try {
       console.log("Reproduciendo respuesta");
       setIsSpeaking(true);
+      setStatus('speaking');
       triggerAnimation('talking');
       
       let audioData = getCachedAudio(text);
@@ -381,6 +406,7 @@ export function Simon({ splineRef }: SimonProps) {
           URL.revokeObjectURL(url);
           triggerAnimation('idle');
           setProcessingInput(false);
+          setStatus('idle');
           
           setTimeout(() => {
             if (!isListening && micPermissionGranted) {
@@ -398,6 +424,7 @@ export function Simon({ splineRef }: SimonProps) {
               setIsSpeaking(false);
               triggerAnimation('idle');
               setProcessingInput(false);
+              setStatus('idle');
               
               if (error.name === 'NotAllowedError') {
                 toast.error("Haz clic para activar el audio", {
@@ -428,6 +455,7 @@ export function Simon({ splineRef }: SimonProps) {
           setIsSpeaking(false);
           triggerAnimation('idle');
           setProcessingInput(false);
+          setStatus('idle');
           
           setTimeout(() => {
             if (!isListening && micPermissionGranted) {
@@ -440,6 +468,7 @@ export function Simon({ splineRef }: SimonProps) {
         setIsSpeaking(false);
         triggerAnimation('idle');
         setProcessingInput(false);
+        setStatus('idle');
         
         setTimeout(() => {
           if (!isListening && micPermissionGranted) {
@@ -452,6 +481,7 @@ export function Simon({ splineRef }: SimonProps) {
       setIsSpeaking(false);
       triggerAnimation('idle');
       setProcessingInput(false);
+      setStatus('idle');
       
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
@@ -459,7 +489,7 @@ export function Simon({ splineRef }: SimonProps) {
         }
       }, 800);
     }
-  }, [muted, triggerAnimation]);
+  }, [muted, triggerAnimation, micPermissionGranted, isListening]);
 
   const handleManualStart = useCallback(async () => {
     if (!initialized) {
@@ -481,6 +511,7 @@ export function Simon({ splineRef }: SimonProps) {
         setIsSpeaking(false);
         triggerAnimation('idle');
         setProcessingInput(false);
+        setStatus('idle');
         
         setTimeout(() => {
           if (!isListening && micPermissionGranted) {
@@ -492,13 +523,32 @@ export function Simon({ splineRef }: SimonProps) {
     toast.info(muted ? "Audio activado" : "Audio silenciado", { duration: 1500 });
   }, [muted, isSpeaking, micPermissionGranted, isListening, triggerAnimation]);
 
+  // Get status text with animated dots
+  const getStatusText = () => {
+    switch (status) {
+      case 'listening':
+        return `Escuchando${dots}`;
+      case 'processing':
+        return `Procesando${dots}`;
+      case 'speaking':
+        return `Hablando${dots}`;
+      default:
+        return micPermissionGranted ? 'Listo' : 'Necesita micrófono';
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3 p-4" onClick={handleManualStart}>
       <div className="flex items-center justify-between">
-        <div className={`rounded-full w-3 h-3 ${isListening ? 'bg-red-500 animate-pulse' : isSpeaking ? 'bg-blue-500 animate-pulse' : processingInput ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`}></div>
+        <div className={`rounded-full w-3 h-3 ${
+          status === 'listening' ? 'bg-red-500 animate-pulse' : 
+          status === 'speaking' ? 'bg-blue-500 animate-pulse' : 
+          status === 'processing' ? 'bg-yellow-500 animate-pulse' : 
+          'bg-green-500'
+        }`}></div>
         
         <div className="text-sm text-white/80">
-          {isListening ? 'Escuchando...' : isSpeaking ? 'Hablando...' : processingInput ? 'Procesando...' : micPermissionGranted ? 'Listo' : 'Necesita micrófono'}
+          {getStatusText()}
         </div>
         
         <Button 
@@ -513,18 +563,6 @@ export function Simon({ splineRef }: SimonProps) {
           {muted ? <VolumeX className="h-4 w-4 text-white/70" /> : <Volume2 className="h-4 w-4 text-white/70" />}
         </Button>
       </div>
-      
-      {transcript && (
-        <div className="mt-2 p-2 bg-neutral-800/50 rounded text-sm text-white/70">
-          <strong>Tú:</strong> {transcript}
-        </div>
-      )}
-      
-      {response && (
-        <div className="mt-2 p-2 bg-blue-900/30 rounded text-sm text-white/90">
-          <strong>Simón:</strong> {response}
-        </div>
-      )}
       
       {!micPermissionGranted && (
         <Button 

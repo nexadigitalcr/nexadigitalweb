@@ -19,11 +19,11 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
       body: JSON.stringify({
         model: 'gpt-4o',
         messages,
-        max_tokens: 500,  // Reduced to improve response speed
+        max_tokens: 300,  // Reduced for faster responses
         stream: true,
-        temperature: 0.2,  // Lower temperature for more consistent, faster responses
-        presence_penalty: 0.3,  // Reduced for faster responses
-        frequency_penalty: 0.3   // Reduced for faster responses
+        temperature: 0.3,  // Lower temperature for more consistent, natural responses
+        presence_penalty: 0.2,  // Lowered for more concise replies
+        frequency_penalty: 0.3   // Keeping variety in responses
       })
     });
 

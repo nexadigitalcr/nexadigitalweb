@@ -27,11 +27,11 @@ export async function textToSpeech(text: string, voiceId: string, apiKey: string
       },
       body: JSON.stringify({
         text: speechText,
-        model_id: 'eleven_turbo_v2',  // Using faster Turbo model for quicker synthesis
+        model_id: 'eleven_multilingual_v2',  // Using multilingual model for better Spanish
         voice_settings: {
-          stability: 0.4,          // Higher stability for more consistent output
-          similarity_boost: 0.75,  // Good balance of similarity and performance
-          style: 0.2,              // Lower style for more natural speech
+          stability: 0.5,          // Better stability for Spanish
+          similarity_boost: 0.8,   // Higher similarity for more natural Spanish
+          style: 0.3,              // Slightly higher style for more expressive Spanish
           use_speaker_boost: true  // Improve clarity
         }
       })

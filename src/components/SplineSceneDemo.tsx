@@ -128,7 +128,7 @@ export function SplineSceneBasic() {
           />
           
           {splineLoaded && (
-            <div className="absolute bottom-4 right-4 z-20 w-80 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border border-slate-800">
+            <div className="absolute bottom-4 right-4 z-20 w-60 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border border-slate-800">
               <Simon splineRef={splineRef} />
             </div>
           )}
