@@ -4,11 +4,18 @@
 import { SplineScene } from "@/components/ui/splite";
 import { Card } from "@/components/ui/card";
 import { Spotlight } from "@/components/ui/spotlight";
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { Simon } from "@/components/Simon";
  
 export function SplineSceneBasic() {
   const [showSimon, setShowSimon] = useState(true);
   const [welcomeVisible, setWelcomeVisible] = useState(true);
+  const splineRef = useRef(null);
+
+  const onLoad = (spline: any) => {
+    splineRef.current = spline;
+    console.log("Spline scene loaded", spline);
+  };
 
   return (
     <Card className="w-full h-screen bg-black border-none rounded-none relative overflow-hidden">
@@ -58,7 +65,11 @@ export function SplineSceneBasic() {
               <SplineScene 
                 scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
                 className="w-full h-full"
+                onLoad={onLoad}
               />
+              <div className="absolute bottom-4 right-4 z-20 w-80 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden">
+                <Simon splineRef={splineRef} />
+              </div>
             </>
           ) : (
             <div className="w-full h-full flex items-center justify-center text-neutral-400">
