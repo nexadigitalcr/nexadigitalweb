@@ -24,22 +24,6 @@ export function SplineSceneBasic() {
         fill="white"
       />
       
-      {/* AI/Normal Switch */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-        <span className="text-xs text-neutral-400">Normal</span>
-        <button 
-          onClick={() => setShowSimon(!showSimon)}
-          className="relative h-6 w-12 rounded-full bg-neutral-800 p-1 transition-colors duration-200"
-        >
-          <span 
-            className={`absolute inset-y-1 left-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
-              showSimon ? 'translate-x-6' : 'translate-x-0'
-            }`}
-          />
-        </button>
-        <span className="text-xs text-neutral-400">IA</span>
-      </div>
-      
       <div className="flex h-full flex-col md:flex-row">
         {/* Left content */}
         <div className="flex-1 p-8 relative z-10 flex flex-col justify-center">
@@ -57,25 +41,17 @@ export function SplineSceneBasic() {
 
         {/* Right content - Simón (3D interactive element) */}
         <div className="flex-1 relative">
-          {showSimon ? (
-            <>
-              <div className="absolute top-4 left-4 z-20 text-white text-sm font-medium bg-blue-500/20 px-3 py-1 rounded-full">
-                Simón
-              </div>
-              <SplineScene 
-                scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-                className="w-full h-full"
-                onLoad={onLoad}
-              />
-              <div className="absolute bottom-4 right-4 z-20 w-80 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden">
-                <Simon splineRef={splineRef} />
-              </div>
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-neutral-400">
-              <p>Modo normal activado</p>
-            </div>
-          )}
+          <div className="absolute top-4 left-4 z-20 text-white text-sm font-medium bg-blue-500/20 px-3 py-1 rounded-full">
+            Simón
+          </div>
+          <SplineScene 
+            scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
+            className="w-full h-full"
+            onLoad={onLoad}
+          />
+          <div className="absolute bottom-4 right-4 z-20 w-80 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden">
+            <Simon splineRef={splineRef} />
+          </div>
         </div>
       </div>
     </Card>

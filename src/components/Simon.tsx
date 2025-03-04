@@ -1,3 +1,4 @@
+
 import { useRef, useState, useEffect } from 'react';
 import { Mic, MicOff } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -14,29 +15,52 @@ interface SimonProps {
   splineRef: React.MutableRefObject<any>;
 }
 
+// Claves API precargadas
+const OPENAI_API_KEY = "sk-AQUI-TU-CLAVE-DE-OPENAI";
+const ELEVENLABS_API_KEY = "AQUI-TU-CLAVE-DE-ELEVENLABS";
+const ELEVENLABS_VOICE_ID = "N2lVS1w4EtoT3dr4eOWO"; // Callum por defecto
+
 export function Simon({ splineRef }: SimonProps) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [response, setResponse] = useState('');
-  const [apiKeys, setApiKeys] = useState({
-    openai: localStorage.getItem('openai_api_key') || '',
-    elevenlabs: localStorage.getItem('elevenlabs_api_key') || ''
-  });
-  const [voiceId, setVoiceId] = useState(localStorage.getItem('elevenlabs_voice_id') || 'N2lVS1w4EtoT3dr4eOWO'); // Default to Callum voice
+  const [initialized, setInitialized] = useState(false);
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Mensaje de bienvenida
+  const welcomeMessage = "Hola, bienvenido a Nexa Digital. Mi nombre es Simón, ¿cómo puedo ayudarte hoy?";
+
   useEffect(() => {
     audioRef.current = new Audio();
+    
+    // Iniciar automáticamente al cargar el componente
+    if (!initialized) {
+      setTimeout(() => {
+        setInitialized(true);
+        playResponse(welcomeMessage);
+        // Después de que termine de hablar, iniciará la escucha
+      }, 1000);
+    }
     
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
       }
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
     };
   }, []);
+
+  // Cuando termine de hablar, inicia la escucha
+  useEffect(() => {
+    if (initialized && !isSpeaking && !isListening) {
+      startListening();
+    }
+  }, [initialized, isSpeaking, isListening]);
 
   const triggerAnimation = (animationName: string) => {
     if (splineRef.current) {
@@ -55,11 +79,6 @@ export function Simon({ splineRef }: SimonProps) {
   };
 
   const startListening = () => {
-    if (!apiKeys.openai || !apiKeys.elevenlabs) {
-      toast.error('Por favor, configura tus API keys primero');
-      return;
-    }
-
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       toast.error('Tu navegador no soporta reconocimiento de voz');
       return;
@@ -87,21 +106,27 @@ export function Simon({ splineRef }: SimonProps) {
       console.error('Speech recognition error:', event.error);
       setIsListening(false);
       triggerAnimation('idle');
+      
+      // Reintentar la escucha después de un error
+      setTimeout(() => {
+        if (!isSpeaking) {
+          startListening();
+        }
+      }, 1000);
     };
 
     recognitionRef.current.onend = () => {
       setIsListening(false);
+      
+      // Reiniciar la escucha automáticamente si no está hablando
+      setTimeout(() => {
+        if (!isSpeaking) {
+          startListening();
+        }
+      }, 500);
     };
 
     recognitionRef.current.start();
-  };
-
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-      triggerAnimation('idle');
-    }
   };
 
   const processSpeech = async (text: string) => {
@@ -118,13 +143,20 @@ export function Simon({ splineRef }: SimonProps) {
         { role: 'user', content: text }
       ];
 
-      const aiResponse = await generateChatResponse(messages, apiKeys.openai);
+      const aiResponse = await generateChatResponse(messages, OPENAI_API_KEY);
       setResponse(aiResponse);
       
       playResponse(aiResponse);
     } catch (error) {
       console.error('Error processing speech:', error);
       triggerAnimation('idle');
+      
+      // Si hay un error, reiniciamos la escucha
+      setTimeout(() => {
+        if (!isListening) {
+          startListening();
+        }
+      }, 1000);
     }
   };
 
@@ -136,7 +168,7 @@ export function Simon({ splineRef }: SimonProps) {
       let audioData = getCachedAudio(text);
       
       if (!audioData) {
-        audioData = await textToSpeech(text, voiceId, apiKeys.elevenlabs);
+        audioData = await textToSpeech(text, ELEVENLABS_VOICE_ID, ELEVENLABS_API_KEY);
         if (audioData) {
           cacheAudio(text, audioData);
         }
@@ -151,45 +183,48 @@ export function Simon({ splineRef }: SimonProps) {
           setIsSpeaking(false);
           URL.revokeObjectURL(url);
           triggerAnimation('idle');
+          
+          // Reiniciar la escucha después de hablar
+          setTimeout(() => {
+            if (!isListening) {
+              startListening();
+            }
+          }, 500);
         };
         
         audioRef.current.play();
       } else {
         setIsSpeaking(false);
         triggerAnimation('idle');
+        
+        // Si hay un error al reproducir, reiniciamos la escucha
+        setTimeout(() => {
+          if (!isListening) {
+            startListening();
+          }
+        }, 500);
       }
     } catch (error) {
       console.error('Error playing response:', error);
       setIsSpeaking(false);
       triggerAnimation('idle');
+      
+      // Si hay un error, reiniciamos la escucha
+      setTimeout(() => {
+        if (!isListening) {
+          startListening();
+        }
+      }, 1000);
     }
-  };
-
-  const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setApiKeys(prev => ({ ...prev, [name]: value }));
-    localStorage.setItem(`${name}_api_key`, value);
-  };
-
-  const handleVoiceIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVoiceId(e.target.value);
-    localStorage.setItem('elevenlabs_voice_id', e.target.value);
   };
 
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <Button 
-          variant={isListening ? "destructive" : "default"}
-          className="rounded-full w-12 h-12 flex items-center justify-center"
-          onClick={isListening ? stopListening : startListening}
-          disabled={isSpeaking}
-        >
-          {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-        </Button>
+        <div className={`rounded-full w-3 h-3 ${isListening ? 'bg-red-500 animate-pulse' : isSpeaking ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`}></div>
         
         <div className="text-sm text-white/80">
-          {isListening ? 'Escuchando...' : isSpeaking ? 'Hablando...' : 'Listo para hablar'}
+          {isListening ? 'Escuchando...' : isSpeaking ? 'Hablando...' : 'Listo para escuchar'}
         </div>
       </div>
       
@@ -204,33 +239,6 @@ export function Simon({ splineRef }: SimonProps) {
           <strong>Simón:</strong> {response}
         </div>
       )}
-      
-      <div className="mt-4 space-y-2">
-        <div className="text-xs text-neutral-400 mb-1">Configuración</div>
-        <input
-          type="password"
-          name="openai"
-          placeholder="OpenAI API Key"
-          value={apiKeys.openai}
-          onChange={handleApiKeyChange}
-          className="w-full p-2 bg-neutral-800 rounded text-sm"
-        />
-        <input
-          type="password"
-          name="elevenlabs"
-          placeholder="ElevenLabs API Key"
-          value={apiKeys.elevenlabs}
-          onChange={handleApiKeyChange}
-          className="w-full p-2 bg-neutral-800 rounded text-sm"
-        />
-        <input
-          type="text"
-          placeholder="ElevenLabs Voice ID"
-          value={voiceId}
-          onChange={handleVoiceIdChange}
-          className="w-full p-2 bg-neutral-800 rounded text-sm"
-        />
-      </div>
     </div>
   );
 }
