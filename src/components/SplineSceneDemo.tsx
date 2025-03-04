@@ -19,6 +19,9 @@ export function SplineSceneBasic() {
           <h1 className="text-6xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-neutral-50 to-neutral-400">
             NEXA DIGITAL
           </h1>
+          <p className="mt-4 text-base text-neutral-300 max-w-lg">
+            No mires el futuro desde lejos… camina con nosotros hacia él.
+          </p>
         </div>
 
         {/* Right content */}
