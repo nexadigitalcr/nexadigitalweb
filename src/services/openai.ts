@@ -40,9 +40,23 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+
       const decodedValue = decoder.decode(value, { stream: true });
-      resultText += decodedValue;
-      console.log("Receiving real-time response:", decodedValue);
+
+      // 🔹 Procesar cada línea del stream
+      const jsonChunks = decodedValue.split("\n").filter(line => line.startsWith("data: "));
+      for (const chunk of jsonChunks) {
+        try {
+          const jsonData = JSON.parse(chunk.replace("data: ", "").trim());
+
+          // 🔥 Extraer solo el texto generado
+          if (jsonData.choices && jsonData.choices[0].delta.content) {
+            resultText += jsonData.choices[0].delta.content;
+          }
+        } catch (error) {
+          console.error("Error processing stream chunk:", error);
+        }
+      }
     }
 
     console.log("Complete OpenAI response:", resultText);
@@ -53,4 +67,3 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
     return "Sorry, an error occurred while processing your request. Please try again.";
   }
 }
-
