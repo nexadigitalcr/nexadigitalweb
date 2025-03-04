@@ -208,7 +208,7 @@ export function Simon({ splineRef }: SimonProps) {
     try {
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.lang = 'es-ES';
-      recognitionRef.current.continuous = false;
+      recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = false;
       recognitionRef.current.maxAlternatives = 1;
 
