@@ -44,8 +44,8 @@ function addToRecentMessages(message: string): void {
 
 export async function generateChatResponse(messages: ChatMessage[], apiKey: string): Promise<string> {
   try {
-    // Get the last user message
-    const lastUserMessage = messages.findLast(m => m.role === 'user')?.content || '';
+    // Get the last user message - replacing findLast with a compatible alternative
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
     
     // Check for repetitive messages
     if (isSimilarToRecentMessages(lastUserMessage)) {
