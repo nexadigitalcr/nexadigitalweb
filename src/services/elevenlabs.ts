@@ -15,8 +15,10 @@ export async function textToSpeech(text: string, voiceId: string, apiKey: string
         text,
         model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75
+          stability: 0.3,          // Lower stability for more natural variations
+          similarity_boost: 0.85,  // Higher similarity for better voice matching
+          style: 0.5,              // Add some style variation
+          use_speaker_boost: true  // Improve clarity
         }
       })
     });

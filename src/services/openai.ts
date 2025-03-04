@@ -20,7 +20,10 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
         model: 'gpt-4o',
         messages,
         max_tokens: 500,
-        temperature: 0.7
+        temperature: 0.7,
+        // Agregar estas opciones para respuestas más naturales
+        presence_penalty: 0.6,
+        frequency_penalty: 0.5
       })
     });
 

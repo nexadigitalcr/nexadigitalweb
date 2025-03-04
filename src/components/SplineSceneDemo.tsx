@@ -15,11 +15,24 @@ export function SplineSceneBasic() {
   const splineRef = useRef(null);
 
   useEffect(() => {
-    // Mostrar mensaje sobre interacción con micrófono
+    // Mostrar mensajes informativos importantes para los usuarios
     toast.info(
-      'Para interactuar con Simón, por favor permite el acceso al micrófono cuando el navegador lo solicite',
-      { duration: 6000 }
+      'Haz clic para comenzar. Para interactuar con Simón, permite el acceso al micrófono cuando te lo solicite.',
+      { duration: 8000 }
     );
+    
+    toast.info(
+      'Asegúrate de que estés usando un navegador moderno (Chrome, Edge o Safari) para mejor experiencia.',
+      { duration: 8000, id: 'browser-info' }
+    );
+
+    // Verificar si estamos en HTTPS
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+      toast.error(
+        'Esta aplicación requiere HTTPS para funcionar correctamente. Por favor, usa una conexión segura.',
+        { duration: 0 } // Permanente
+      );
+    }
   }, []);
 
   const onLoad = (spline: any) => {
