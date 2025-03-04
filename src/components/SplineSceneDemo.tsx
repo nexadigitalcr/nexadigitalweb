@@ -9,15 +9,20 @@ import { Simon } from "@/components/Simon";
 import { toast } from 'sonner';
  
 export function SplineSceneBasic() {
-  const [showSimon, setShowSimon] = useState(true);
   const [welcomeVisible, setWelcomeVisible] = useState(true);
   const [splineLoaded, setSplineLoaded] = useState(false);
+  const [pageReady, setPageReady] = useState(false);
   const splineRef = useRef(null);
 
   useEffect(() => {
+    // Adaptive page load detection for optimal experience
+    const readyTimer = setTimeout(() => {
+      setPageReady(true);
+    }, 2500);
+
     // User guide messages
     const showUserGuide = () => {
-      // First toast - how to get started
+      // Performance guide
       toast.info(
         'Haz clic para interactuar con Simón',
         { duration: 4000, id: 'start-guide' }
@@ -34,10 +39,18 @@ export function SplineSceneBasic() {
       // Third toast - speak clearly
       setTimeout(() => {
         toast.info(
-          'Habla claro y directo para una mejor experiencia',
-          { duration: 3000, id: 'speech-guide' }
+          'Puedes interrumpir a Simón para preguntar algo nuevo',
+          { duration: 3000, id: 'interruption-guide' }
         );
       }, 8000);
+
+      // Fourth toast - feature highlight
+      setTimeout(() => {
+        toast.info(
+          'Simón puede escuchar, pensar y hablar de forma natural',
+          { duration: 3000, id: 'feature-guide' }
+        );
+      }, 11500);
     };
 
     // Check HTTPS
@@ -63,6 +76,7 @@ export function SplineSceneBasic() {
     
     return () => {
       document.removeEventListener('click', unlockAudio);
+      clearTimeout(readyTimer);
     };
   }, []);
 
@@ -80,6 +94,17 @@ export function SplineSceneBasic() {
           spline.emitEvent('mouseDown', idleObj);
         } else {
           console.log("No se encontró la animación 'idle'");
+          
+          // Try alternate animation objects if available
+          const altAnimations = ['blink', 'standby', 'default'];
+          for (const anim of altAnimations) {
+            const obj = spline.findObjectByName(anim);
+            if (obj) {
+              console.log(`Activando animación alternativa '${anim}'`);
+              spline.emitEvent('mouseDown', obj);
+              break;
+            }
+          }
         }
       }
     } catch (error) {
@@ -127,7 +152,7 @@ export function SplineSceneBasic() {
             onLoad={onLoad}
           />
           
-          {splineLoaded && (
+          {splineLoaded && pageReady && (
             <div className="absolute bottom-4 right-4 z-20 w-60 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border border-slate-800">
               <Simon splineRef={splineRef} />
             </div>

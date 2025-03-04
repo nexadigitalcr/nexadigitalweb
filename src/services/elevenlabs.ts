@@ -1,6 +1,14 @@
 
 import { toast } from "sonner";
 
+// Improved settings for Latin Spanish voice (ID: dlGxemPxFMTY7iXagmOj)
+const VOICE_SETTINGS = {
+  stability: 0.4,          // Slightly lower for more natural Spanish
+  similarity_boost: 0.7,   // Balanced for natural Latin Spanish
+  style: 0.4,              // Higher style for more expressive Latin Spanish
+  use_speaker_boost: true  // Improve clarity
+};
+
 export async function textToSpeech(text: string, voiceId: string, apiKey: string): Promise<ArrayBuffer | null> {
   try {
     console.log("Calling ElevenLabs API for voice synthesis");
@@ -12,7 +20,7 @@ export async function textToSpeech(text: string, voiceId: string, apiKey: string
       .trim();                     // Remove leading/trailing whitespace
     
     // Use smaller chunks for faster response
-    const maxChunkLength = 300;
+    const maxChunkLength = 250;
     
     // If text is too long, only synthesize the first part
     const speechText = optimizedText.length > maxChunkLength 
@@ -27,13 +35,8 @@ export async function textToSpeech(text: string, voiceId: string, apiKey: string
       },
       body: JSON.stringify({
         text: speechText,
-        model_id: 'eleven_multilingual_v2',  // Using multilingual model for better Spanish
-        voice_settings: {
-          stability: 0.5,          // Better stability for Spanish
-          similarity_boost: 0.8,   // Higher similarity for more natural Spanish
-          style: 0.3,              // Slightly higher style for more expressive Spanish
-          use_speaker_boost: true  // Improve clarity
-        }
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: VOICE_SETTINGS
       })
     });
 
@@ -79,4 +82,10 @@ export function getCachedAudio(text: string): ArrayBuffer | undefined {
     return cached.data;
   }
   return undefined;
+}
+
+// Function to clear cache - useful for clearing potential stuck responses
+export function clearAudioCache() {
+  audioCache.clear();
+  console.log("Audio cache cleared");
 }
