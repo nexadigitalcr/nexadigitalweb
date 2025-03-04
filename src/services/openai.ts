@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 
 export interface ChatMessage {
@@ -8,7 +7,7 @@ export interface ChatMessage {
 
 export async function generateChatResponse(messages: ChatMessage[], apiKey: string): Promise<string> {
   try {
-    console.log("Llamando a OpenAI API con mensajes:", messages);
+    console.log("Calling OpenAI API with messages:", messages);
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -19,26 +18,39 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
       body: JSON.stringify({
         model: 'gpt-4o',
         messages,
-        max_tokens: 500,
-        temperature: 0.7,
-        // Agregar estas opciones para respuestas más naturales
+        max_tokens: 1000,  // Increased to 1000 for more complete responses
+        stream: true,
+        temperature: 0.3,
         presence_penalty: 0.6,
         frequency_penalty: 0.5
       })
     });
 
-    if (!response.ok) {
+    if (!response.ok || !response.body) {
       const errorData = await response.json();
       console.error('OpenAI API error:', errorData);
       throw new Error(errorData.error?.message || 'Error generating response');
     }
 
-    const data = await response.json();
-    console.log("Respuesta exitosa de OpenAI:", data.choices[0].message.content);
-    return data.choices[0].message.content;
+    // ✅ REAL-TIME STREAM PROCESSING
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let resultText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const decodedValue = decoder.decode(value, { stream: true });
+      resultText += decodedValue;
+      console.log("Receiving real-time response:", decodedValue);
+    }
+
+    console.log("Complete OpenAI response:", resultText);
+    return resultText;
   } catch (error) {
-    console.error('Error llamando a OpenAI:', error);
-    toast.error('Error al generar respuesta de IA');
-    return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, inténtalo de nuevo.";
+    console.error('Error calling OpenAI:', error);
+    toast.error('Error generating AI response');
+    return "Sorry, an error occurred while processing your request. Please try again.";
   }
 }
+
