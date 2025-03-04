@@ -8,6 +8,8 @@ export interface ChatMessage {
 
 export async function generateChatResponse(messages: ChatMessage[], apiKey: string): Promise<string> {
   try {
+    console.log("Llamando a OpenAI API con mensajes:", messages);
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -29,10 +31,11 @@ export async function generateChatResponse(messages: ChatMessage[], apiKey: stri
     }
 
     const data = await response.json();
+    console.log("Respuesta exitosa de OpenAI:", data.choices[0].message.content);
     return data.choices[0].message.content;
   } catch (error) {
-    console.error('Error calling OpenAI:', error);
-    toast.error('Error generating AI response');
-    return "Lo siento, ha ocurrido un error al procesar tu solicitud.";
+    console.error('Error llamando a OpenAI:', error);
+    toast.error('Error al generar respuesta de IA');
+    return "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, inténtalo de nuevo.";
   }
 }

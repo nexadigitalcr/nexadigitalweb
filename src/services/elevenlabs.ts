@@ -3,6 +3,8 @@ import { toast } from "sonner";
 
 export async function textToSpeech(text: string, voiceId: string, apiKey: string): Promise<ArrayBuffer | null> {
   try {
+    console.log("Llamando a ElevenLabs API para síntesis de voz");
+    
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -25,21 +27,27 @@ export async function textToSpeech(text: string, voiceId: string, apiKey: string
       throw new Error('Error generating speech');
     }
 
+    console.log("Síntesis de voz exitosa");
     return await response.arrayBuffer();
   } catch (error) {
-    console.error('Error calling ElevenLabs:', error);
+    console.error('Error llamando a ElevenLabs:', error);
     toast.error('Error generando voz');
     return null;
   }
 }
 
-// Cache to store audio data and avoid repeated API calls
+// Cache para almacenar datos de audio y evitar llamadas API repetidas
 const audioCache = new Map<string, ArrayBuffer>();
 
 export function cacheAudio(text: string, audioData: ArrayBuffer) {
+  console.log("Guardando audio en caché");
   audioCache.set(text, audioData);
 }
 
 export function getCachedAudio(text: string): ArrayBuffer | undefined {
-  return audioCache.get(text);
+  const cached = audioCache.get(text);
+  if (cached) {
+    console.log("Audio encontrado en caché");
+  }
+  return cached;
 }

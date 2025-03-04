@@ -4,17 +4,43 @@
 import { SplineScene } from "@/components/ui/splite";
 import { Card } from "@/components/ui/card";
 import { Spotlight } from "@/components/ui/spotlight";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Simon } from "@/components/Simon";
+import { toast } from 'sonner';
  
 export function SplineSceneBasic() {
   const [showSimon, setShowSimon] = useState(true);
   const [welcomeVisible, setWelcomeVisible] = useState(true);
+  const [splineLoaded, setSplineLoaded] = useState(false);
   const splineRef = useRef(null);
+
+  useEffect(() => {
+    // Mostrar mensaje sobre interacción con micrófono
+    toast.info(
+      'Para interactuar con Simón, por favor permite el acceso al micrófono cuando el navegador lo solicite',
+      { duration: 6000 }
+    );
+  }, []);
 
   const onLoad = (spline: any) => {
     splineRef.current = spline;
-    console.log("Spline scene loaded", spline);
+    setSplineLoaded(true);
+    console.log("Spline scene cargada correctamente", spline);
+    
+    // Intentar activar animación inicial si existe
+    try {
+      if (spline) {
+        const idleObj = spline.findObjectByName('idle');
+        if (idleObj) {
+          console.log("Activando animación inicial 'idle'");
+          spline.emitEvent('mouseDown', idleObj);
+        } else {
+          console.log("No se encontró la animación 'idle'");
+        }
+      }
+    } catch (error) {
+      console.error("Error al activar animación inicial:", error);
+    }
   };
 
   return (
@@ -49,9 +75,11 @@ export function SplineSceneBasic() {
             className="w-full h-full"
             onLoad={onLoad}
           />
-          <div className="absolute bottom-4 right-4 z-20 w-80 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden">
-            <Simon splineRef={splineRef} />
-          </div>
+          {splineLoaded && (
+            <div className="absolute bottom-4 right-4 z-20 w-80 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden">
+              <Simon splineRef={splineRef} />
+            </div>
+          )}
         </div>
       </div>
     </Card>
