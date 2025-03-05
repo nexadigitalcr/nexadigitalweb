@@ -1,31 +1,69 @@
-
 import { toast } from "sonner";
 
-// Improved settings for Latin Spanish voice (ID: dlGxemPxFMTY7iXagmOj)
+// Optimized settings for more natural Latin Spanish voice
 const VOICE_SETTINGS = {
-  stability: 0.4,          // Slightly lower for more natural Spanish
-  similarity_boost: 0.7,   // Balanced for natural Latin Spanish
-  style: 0.4,              // Higher style for more expressive Latin Spanish
-  use_speaker_boost: true  // Improve clarity
+  stability: 0.35,        // Reduced for more natural inflection
+  similarity_boost: 0.75, // Increased for more consistent voice
+  style: 0.45,            // Slightly increased for more expressiveness
+  use_speaker_boost: true // Improve clarity
 };
 
-export async function textToSpeech(text: string, voiceId: string, apiKey: string): Promise<ArrayBuffer | null> {
+// Improved audio cache with size limit and TTL
+const MAX_CACHE_SIZE = 30; // Increased from 20
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes in milliseconds
+const audioCache = new Map<string, {data: ArrayBuffer, timestamp: number}>();
+
+// Function to clear expired cache entries
+function cleanExpiredCache() {
+  const now = Date.now();
+  const expiredTime = now - CACHE_TTL;
+  
+  // Remove entries older than TTL
+  for (const [key, value] of audioCache.entries()) {
+    if (value.timestamp < expiredTime) {
+      audioCache.delete(key);
+    }
+  }
+}
+
+export async function textToSpeech(
+  text: string, 
+  voiceId: string, 
+  apiKey: string,
+  onProgress?: (progress: number) => void
+): Promise<ArrayBuffer | null> {
   try {
     console.log("Calling ElevenLabs API for voice synthesis");
     
+    // Check cache first (clean expired entries periodically)
+    if (audioCache.size > 0) {
+      cleanExpiredCache();
+      const cached = getCachedAudio(text);
+      if (cached) {
+        if (onProgress) onProgress(100);
+        return cached;
+      }
+    }
+    
+    // If not in cache, notify 10% progress
+    if (onProgress) onProgress(10);
+    
     // Optimize text for speech synthesis
     const optimizedText = text
-      .replace(/\s+/g, ' ')        // Replace multiple spaces with a single space
-      .replace(/\n+/g, ' ')        // Replace newlines with spaces
-      .trim();                     // Remove leading/trailing whitespace
+      .replace(/\s+/g, ' ')
+      .replace(/\n+/g, ' ')
+      .trim();
     
-    // Use smaller chunks for faster response
-    const maxChunkLength = 250;
+    // Break longer text into smaller chunks for faster response
+    const maxChunkLength = 300; // Increased from 250 for more natural sentences
     
     // If text is too long, only synthesize the first part
     const speechText = optimizedText.length > maxChunkLength 
       ? optimizedText.substring(0, maxChunkLength) + '...' 
       : optimizedText;
+    
+    // Progress update
+    if (onProgress) onProgress(30);
     
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
@@ -40,24 +78,35 @@ export async function textToSpeech(text: string, voiceId: string, apiKey: string
       })
     });
 
+    // Progress update
+    if (onProgress) onProgress(70);
+
     if (!response.ok) {
       const errorData = await response.text();
       console.error('ElevenLabs API error:', errorData);
       throw new Error('Error generating speech');
     }
 
+    // Final progress update
+    if (onProgress) onProgress(90);
+
+    const audioData = await response.arrayBuffer();
+    
     console.log("Voice synthesis successful");
-    return await response.arrayBuffer();
+    
+    // Cache the response
+    cacheAudio(text, audioData);
+    
+    // Complete progress
+    if (onProgress) onProgress(100);
+    
+    return audioData;
   } catch (error) {
     console.error('Error calling ElevenLabs:', error);
     toast.error('Error generating voice');
     return null;
   }
 }
-
-// Audio cache with size limit to prevent memory issues
-const MAX_CACHE_SIZE = 20;
-const audioCache = new Map<string, {data: ArrayBuffer, timestamp: number}>();
 
 export function cacheAudio(text: string, audioData: ArrayBuffer) {
   console.log("Saving audio to cache");
@@ -79,6 +128,8 @@ export function getCachedAudio(text: string): ArrayBuffer | undefined {
   const cached = audioCache.get(text);
   if (cached) {
     console.log("Audio found in cache");
+    // Update timestamp to keep frequently used responses fresh
+    cached.timestamp = Date.now();
     return cached.data;
   }
   return undefined;
@@ -88,4 +139,29 @@ export function getCachedAudio(text: string): ArrayBuffer | undefined {
 export function clearAudioCache() {
   audioCache.clear();
   console.log("Audio cache cleared");
+}
+
+// Pre-buffer common responses for instant playback
+export async function preloadCommonResponses(voiceId: string, apiKey: string) {
+  const commonPhrases = [
+    "Un momento, estoy pensando.",
+    "¿Puedes repetir eso, por favor?",
+    "No entendí bien, ¿puedes decirlo de otra manera?",
+    "Hola, ¿en qué puedo ayudarte?",
+    "Disculpa por la interrupción."
+  ];
+  
+  for (const phrase of commonPhrases) {
+    if (!getCachedAudio(phrase)) {
+      try {
+        const audioData = await textToSpeech(phrase, voiceId, apiKey);
+        if (audioData) {
+          cacheAudio(phrase, audioData);
+          console.log(`Preloaded: "${phrase}"`);
+        }
+      } catch (error) {
+        console.error(`Failed to preload: "${phrase}"`, error);
+      }
+    }
+  }
 }
