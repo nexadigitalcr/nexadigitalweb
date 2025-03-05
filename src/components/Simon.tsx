@@ -305,7 +305,10 @@ export function Simon({ splineRef }: SimonProps) {
   }, [initialized, isSpeaking, isListening, micPermissionGranted, processingInput]);
 
   const triggerAnimation = useCallback((animationName: string) => {
-    if (splineRef.current) {
+    if (window.simonAnimations && window.simonAnimations[animationName]) {
+      console.log("Triggering animation via global method:", animationName);
+      window.simonAnimations[animationName]();
+    } else if (splineRef.current) {
       try {
         console.log("Buscando animación:", animationName);
         const obj = splineRef.current.findObjectByName(animationName);

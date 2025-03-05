@@ -1,4 +1,3 @@
-
 interface SpeechRecognitionErrorEvent extends Event {
   error: string;
   message: string;
@@ -55,14 +54,25 @@ interface SpeechRecognitionConstructor {
   prototype: SpeechRecognition;
 }
 
+interface SimonAnimations {
+  playAnimation: (name: string, immediate?: boolean) => void;
+  idle: () => void;
+  blink: () => void;
+  talking: () => void;
+  thinking: () => void;
+  listening: () => void;
+  nod: () => void;
+  headTilt: () => void;
+}
+
 declare global {
   interface Window {
-    SpeechRecognition: SpeechRecognitionConstructor;
-    webkitSpeechRecognition: SpeechRecognitionConstructor;
+    SpeechRecognition?: typeof SpeechRecognition;
+    webkitSpeechRecognition?: typeof SpeechRecognition;
+    simonAnimations?: SimonAnimations;
   }
 }
 
-// Export the types to make them available for import
 export type {
   SpeechRecognition,
   SpeechRecognitionEvent,
