@@ -20,6 +20,25 @@ const OPENAI_API_KEY = "sk-proj-DT5IhigFhJgVrSUyZXcgbjBbQjt_7fyX9_0W5mu8zV2BJdLD
 // ElevenLabs (Latin Spanish Voice)
 const ELEVENLABS_API_KEY = "sk_45d3e665137c012665d22e754828f2e4451b6eca216b1bf6";
 const ELEVENLABS_VOICE_ID = "dlGxemPxFMTY7iXagmOj"; // Latin Spanish voice ID
+// OpenAI Assistant ID
+const OPENAI_ASSISTANT_ID = "asst_2c09hq5g7hu4c6s4tSqy1suy"; // Simon
+
+async function callOpenAI(prompt) {
+    const response = await fetch("https://api.openai.com/v1/assistants/" + OPENAI_ASSISTANT_ID, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            model: "gpt-4-turbo",
+            messages: [{ role: "user", content: prompt }]
+        })
+    });
+
+    return response.json();
+}
+
 
 export function Simon({ splineRef }: SimonProps) {
   const [isListening, setIsListening] = useState(false);
