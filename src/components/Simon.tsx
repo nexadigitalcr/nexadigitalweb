@@ -1,4 +1,3 @@
-
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import type {
 
 interface SimonProps {
   splineRef: React.MutableRefObject<any>;
+  onStateChange?: (state: 'idle' | 'listening' | 'processing' | 'speaking') => void;
 }
 
 // Preloaded API Keys
@@ -22,7 +22,7 @@ const OPENAI_API_KEY = "sk-proj-DT5IhigFhJgVrSUyZXcgbjBbQjt_7fyX9_0W5mu8zV2BJdLD
 const ELEVENLABS_API_KEY = "sk_45d3e665137c012665d22e754828f2e4451b6eca216b1bf6";
 const ELEVENLABS_VOICE_ID = "dlGxemPxFMTY7iXagmOj"; // Latin Spanish voice ID
 
-export function Simon({ splineRef }: SimonProps) {
+export function Simon({ splineRef, onStateChange }: SimonProps) {
   // State variables
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -36,6 +36,14 @@ export function Simon({ splineRef }: SimonProps) {
   const [pageFullyLoaded, setPageFullyLoaded] = useState(false);
   const [partialResponse, setPartialResponse] = useState<string | null>(null);
   const [speechProgress, setSpeechProgress] = useState(0);
+  
+  // Update status setter to also call onStateChange prop
+  const setStatusWithCallback = (newStatus: 'idle' | 'listening' | 'processing' | 'speaking') => {
+    setStatus(newStatus);
+    if (onStateChange) {
+      onStateChange(newStatus);
+    }
+  };
   
   // Refs
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -231,7 +239,7 @@ export function Simon({ splineRef }: SimonProps) {
               audioRef.current.pause();
               setIsSpeaking(false);
               triggerAnimation('idle');
-              setStatus('idle');
+              setStatusWithCallback('idle');
             }
           }
         }
@@ -307,7 +315,7 @@ export function Simon({ splineRef }: SimonProps) {
       speakingStartTimeRef.current = null;
       triggerAnimation('idle');
       setProcessingInput(false);
-      setStatus('idle');
+      setStatusWithCallback('idle');
       
       // Small delay before starting to listen again
       setTimeout(() => {
@@ -323,7 +331,7 @@ export function Simon({ splineRef }: SimonProps) {
       speakingStartTimeRef.current = null;
       triggerAnimation('idle');
       setProcessingInput(false);
-      setStatus('idle');
+      setStatusWithCallback('idle');
     };
     
     // Inicialización al cargar el componente
@@ -506,7 +514,7 @@ export function Simon({ splineRef }: SimonProps) {
       recognitionRef.current.onstart = () => {
         console.log("Reconocimiento de voz iniciado");
         setIsListening(true);
-        setStatus('listening');
+        setStatusWithCallback('listening');
         triggerAnimation('listening');
       };
 
@@ -535,7 +543,7 @@ export function Simon({ splineRef }: SimonProps) {
       recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Error de reconocimiento:', event.error);
         setIsListening(false);
-        setStatus('idle');
+        setStatusWithCallback('idle');
         triggerAnimation('idle');
         
         if (event.error === 'not-allowed') {
@@ -586,7 +594,7 @@ export function Simon({ splineRef }: SimonProps) {
     } catch (error) {
       console.error("Error crítico:", error);
       toast.error("Error de reconocimiento de voz");
-      setStatus('idle');
+      setStatusWithCallback('idle');
       
       setTimeout(() => {
         if (!isSpeaking && micPermissionGranted && !processingInput) {
@@ -605,7 +613,7 @@ export function Simon({ splineRef }: SimonProps) {
     if (partialText && partialText.length > 0) {
       if (status !== 'speaking') {
         triggerAnimation('talking');
-        setStatus('speaking');
+        setStatusWithCallback('speaking');
       }
     }
   }, [status, triggerAnimation]);
@@ -614,7 +622,7 @@ export function Simon({ splineRef }: SimonProps) {
     if (!text.trim()) return;
     
     setProcessingInput(true);
-    setStatus('processing');
+    setStatusWithCallback('processing');
     setUserSpeaking(false);
     streamingResponseRef.current = null;
     setPartialResponse(null);
@@ -684,7 +692,7 @@ export function Simon({ splineRef }: SimonProps) {
       console.error('Error al procesar:', error);
       triggerAnimation('idle');
       setProcessingInput(false);
-      setStatus('idle');
+      setStatusWithCallback('idle');
       streamingResponseRef.current = null;
       setPartialResponse(null);
       
@@ -702,7 +710,7 @@ export function Simon({ splineRef }: SimonProps) {
       setIsSpeaking(false);
       triggerAnimation('idle');
       setProcessingInput(false);
-      setStatus('idle');
+      setStatusWithCallback('idle');
       
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
@@ -715,7 +723,7 @@ export function Simon({ splineRef }: SimonProps) {
     try {
       console.log("Reproduciendo respuesta");
       setIsSpeaking(true);
-      setStatus('speaking');
+      setStatusWithCallback('speaking');
       speakingStartTimeRef.current = Date.now();
       triggerAnimation('talking');
       
@@ -776,7 +784,7 @@ export function Simon({ splineRef }: SimonProps) {
                 speakingStartTimeRef.current = null;
                 triggerAnimation('idle');
                 setProcessingInput(false);
-                setStatus('idle');
+                setStatusWithCallback('idle');
                 
                 if (error.name === 'NotAllowedError') {
                   toast.error("Haz clic para activar el audio", {
@@ -809,7 +817,7 @@ export function Simon({ splineRef }: SimonProps) {
           speakingStartTimeRef.current = null;
           triggerAnimation('idle');
           setProcessingInput(false);
-          setStatus('idle');
+          setStatusWithCallback('idle');
           
           setTimeout(() => {
             if (!isListening && micPermissionGranted) {
@@ -823,7 +831,7 @@ export function Simon({ splineRef }: SimonProps) {
         speakingStartTimeRef.current = null;
         triggerAnimation('idle');
         setProcessingInput(false);
-        setStatus('idle');
+        setStatusWithCallback('idle');
         
         setTimeout(() => {
           if (!isListening && micPermissionGranted) {
@@ -837,7 +845,7 @@ export function Simon({ splineRef }: SimonProps) {
       speakingStartTimeRef.current = null;
       triggerAnimation('idle');
       setProcessingInput(false);
-      setStatus('idle');
+      setStatusWithCallback('idle');
       
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
@@ -878,7 +886,7 @@ export function Simon({ splineRef }: SimonProps) {
         speakingStartTimeRef.current = null;
         triggerAnimation('idle');
         setProcessingInput(false);
-        setStatus('idle');
+        setStatusWithCallback('idle');
         
         // Small delay before starting to listen
         setTimeout(() => {
@@ -897,7 +905,7 @@ export function Simon({ splineRef }: SimonProps) {
         speakingStartTimeRef.current = null;
         triggerAnimation('idle');
         setProcessingInput(false);
-        setStatus('idle');
+        setStatusWithCallback('idle');
         
         setTimeout(() => {
           if (!isListening && micPermissionGranted) {

@@ -1,3 +1,4 @@
+
 interface SpeechRecognitionErrorEvent extends Event {
   error: string;
   message: string;
@@ -63,6 +64,8 @@ interface SimonAnimations {
   listening: () => void;
   nod: () => void;
   headTilt: () => void;
+  lookAt: (elementId: string) => void;
+  setConversationState: (state: string) => void;
 }
 
 declare global {
