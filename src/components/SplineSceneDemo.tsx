@@ -17,6 +17,7 @@ export function SplineSceneBasic() {
   const animationIntervalRef = useRef(null);
   const lastAnimationRef = useRef('idle');
   const animationQueue = useRef([]);
+  const [conversationState, setConversationState] = useState('idle'); // idle, listening, speaking
 
   // Track mouse position for responsive character movement
   useEffect(() => {
@@ -35,42 +36,56 @@ export function SplineSceneBasic() {
   }, []);
 
   useEffect(() => {
-    // Adaptive page load detection for optimal experience
-    const readyTimer = setTimeout(() => {
+    // Adaptive page load detection - use real load event instead of fixed timeout
+    const handlePageReady = () => {
       setPageReady(true);
-    }, 2500);
+      console.log("Page ready event triggered");
+    };
 
-    // User guide messages
+    // Check if page is already loaded
+    if (document.readyState === 'complete') {
+      handlePageReady();
+    } else {
+      window.addEventListener('load', handlePageReady);
+    }
+
+    // Show user guide only once using localStorage
     const showUserGuide = () => {
-      // Performance guide
-      toast.info(
-        'Haz clic para interactuar con Simón',
-        { duration: 4000, id: 'start-guide' }
-      );
-      
-      // Second toast - browser compatibility
-      setTimeout(() => {
+      // Check if user has seen the guide before
+      if (!localStorage.getItem("simonGuideShown")) {
+        // Performance guide
         toast.info(
-          'Para mejor experiencia, usa Chrome, Edge o Safari',
-          { duration: 3000, id: 'browser-guide' }
+          'Haz clic para interactuar con Simón',
+          { duration: 4000, id: 'start-guide' }
         );
-      }, 4500);
-      
-      // Third toast - speak clearly
-      setTimeout(() => {
-        toast.info(
-          'Puedes interrumpir a Simón para preguntar algo nuevo',
-          { duration: 3000, id: 'interruption-guide' }
-        );
-      }, 8000);
+        
+        // Second toast - browser compatibility
+        setTimeout(() => {
+          toast.info(
+            'Para mejor experiencia, usa Chrome, Edge o Safari',
+            { duration: 3000, id: 'browser-guide' }
+          );
+        }, 4500);
+        
+        // Third toast - speak clearly
+        setTimeout(() => {
+          toast.info(
+            'Puedes interrumpir a Simón para preguntar algo nuevo',
+            { duration: 3000, id: 'interruption-guide' }
+          );
+        }, 8000);
 
-      // Fourth toast - feature highlight
-      setTimeout(() => {
-        toast.info(
-          'Simón puede escuchar, pensar y hablar de forma natural',
-          { duration: 3000, id: 'feature-guide' }
-        );
-      }, 11500);
+        // Fourth toast - feature highlight
+        setTimeout(() => {
+          toast.info(
+            'Simón puede escuchar, pensar y hablar de forma natural',
+            { duration: 3000, id: 'feature-guide' }
+          );
+        }, 11500);
+        
+        // Mark guide as shown
+        localStorage.setItem("simonGuideShown", "true");
+      }
     };
 
     // Check HTTPS
@@ -95,8 +110,8 @@ export function SplineSceneBasic() {
     document.addEventListener('click', unlockAudio, { once: true });
     
     return () => {
+      window.removeEventListener('load', handlePageReady);
       document.removeEventListener('click', unlockAudio);
-      clearTimeout(readyTimer);
       if (animationIntervalRef.current) {
         clearInterval(animationIntervalRef.current);
       }
@@ -136,16 +151,16 @@ export function SplineSceneBasic() {
         lastAnimationRef.current = animationName;
         
         // After animation completes, play next in queue
-        // Animation durations are approximated
+        // Animation durations are optimized for better responsiveness
         const animationDurations = {
-          'idle': 3000,
+          'idle': 2000,          // Reduced from 3000
           'blink': 300,
           'talking': 500,
-          'thinking': 2000,
-          'listening': 2000,
+          'thinking': 1500,      // Reduced from 2000
+          'listening': 1500,     // Reduced from 2000
           'nod': 600,
           'headTilt': 500,
-          'standby': 4000
+          'standby': 2500        // Reduced from 4000
         };
         
         setTimeout(() => {
@@ -163,7 +178,7 @@ export function SplineSceneBasic() {
               lastAnimationRef.current = 'idle';
             }
           }
-        }, animationDurations[animationName] || 2000);
+        }, animationDurations[animationName] || 1500); // Default reduced from 2000
       } else {
         console.log(`Animation not found: ${animationName}`);
         // Try fallback animations
@@ -180,17 +195,19 @@ export function SplineSceneBasic() {
     }
   };
   
-  // Handle missing animations gracefully
+  // Handle missing animations gracefully with improved fallbacks
   const handleMissingAnimation = (animationName) => {
     if (!splineRef.current) return;
     
-    // Map requested animations to available ones
+    // Enhanced map of requested animations to available ones
     const fallbackMap = {
-      'talking': ['speak', 'mouth', 'talk'],
-      'thinking': ['process', 'blink', 'headTilt'],
-      'listening': ['listen', 'attentive', 'headTilt'],
-      'nod': ['agree', 'headNod', 'headTilt'],
-      'headTilt': ['tilt', 'look', 'blink']
+      'talking': ['speak', 'mouth', 'talk', 'facial_movement'],
+      'thinking': ['process', 'blink', 'headTilt', 'lookAround'],
+      'listening': ['listen', 'attentive', 'headTilt', 'nod'],
+      'nod': ['agree', 'headNod', 'headTilt', 'facial_movement'],
+      'headTilt': ['tilt', 'look', 'blink', 'facial_movement'],
+      'lookLeft': ['lookDirection', 'turnHead', 'headTilt'],
+      'lookRight': ['lookDirection', 'turnHead', 'headTilt']
     };
     
     const fallbacks = fallbackMap[animationName] || ['blink', 'idle'];
@@ -220,7 +237,7 @@ export function SplineSceneBasic() {
     }
   };
 
-  // Setup natural idle behaviors
+  // Enhanced natural idle behaviors with more variability
   const setupNaturalIdleBehavior = () => {
     if (!splineRef.current) return;
     
@@ -229,27 +246,43 @@ export function SplineSceneBasic() {
       clearInterval(animationIntervalRef.current);
     }
     
-    // Set up random idle animations
+    // Set up random idle animations with more variety
     animationIntervalRef.current = setInterval(() => {
       // Only play idle animations if not in the middle of other animations
-      if (animationQueue.current.length === 0) {
+      if (animationQueue.current.length === 0 && conversationState === 'idle') {
         const rand = Math.random();
         
-        if (rand < 0.6) {
-          // 60% chance to blink
+        if (rand < 0.5) {
+          // 50% chance to blink
           queueAnimation('blink');
-        } else if (rand < 0.8) {
+        } else if (rand < 0.7) {
           // 20% chance to do a head tilt
           queueAnimation('headTilt');
-        } else {
-          // 20% chance to do a subtle looking animation
-          // Use cursor position to determine where to look
+        } else if (rand < 0.85) {
+          // 15% chance to look toward cursor position
           const lookDirection = cursorRef.current.x > 0.5 ? 'lookRight' : 'lookLeft';
           queueAnimation(lookDirection);
+        } else {
+          // 15% chance to do a subtle nod
+          queueAnimation('nod');
         }
       }
-    }, 3000 + Math.random() * 2000); // Random interval between 3-5 seconds
+    }, 2500 + Math.random() * 1500); // More frequent random interval between 2.5-4 seconds
   };
+
+  // React to conversation state changes
+  useEffect(() => {
+    if (!splineRef.current) return;
+    
+    // Sync animation with conversation state
+    if (conversationState === 'listening') {
+      queueAnimation('listening', true);
+    } else if (conversationState === 'speaking') {
+      queueAnimation('talking', true);
+    } else if (conversationState === 'thinking') {
+      queueAnimation('thinking', true);
+    }
+  }, [conversationState]);
 
   const onLoad = (spline) => {
     splineRef.current = spline;
@@ -264,7 +297,8 @@ export function SplineSceneBasic() {
         'idle', 'blink', 'talking', 'thinking', 'listening', 
         'nod', 'headTilt', 'lookLeft', 'lookRight', 'standby',
         'speak', 'mouth', 'talk', 'process', 'listen', 'attentive',
-        'agree', 'headNod', 'tilt', 'look'
+        'agree', 'headNod', 'tilt', 'look', 'facial_movement',
+        'lookDirection', 'turnHead', 'lookAround'
       ];
       
       // Check which animations are available
@@ -297,7 +331,7 @@ export function SplineSceneBasic() {
             spline.emitEvent('mouseDown', blinkObj);
             console.log("Blinking to show liveliness");
           }
-        }, 1000);
+        }, 800); // Reduced from 1000ms
         
         // Then do a subtle head movement
         setTimeout(() => {
@@ -308,12 +342,12 @@ export function SplineSceneBasic() {
             spline.emitEvent('mouseDown', headTiltObj);
             console.log("Subtle head movement");
           }
-        }, 2000);
+        }, 1500); // Reduced from 2000ms
         
         // Return to idle
         setTimeout(() => {
           spline.emitEvent('mouseDown', idleObj);
-        }, 3000);
+        }, 2300); // Reduced from 3000ms
       } else {
         console.log("No se encontró la animación 'idle'");
         
@@ -335,16 +369,44 @@ export function SplineSceneBasic() {
       console.error("Error al activar animación inicial:", error);
     }
     
-    // Expose animation functions to the window for other components to use
+    // Expose animation functions to the window with enhanced state awareness
     window.simonAnimations = {
       playAnimation: (name, immediate) => queueAnimation(name, immediate),
-      idle: () => queueAnimation('idle', true),
+      idle: () => {
+        setConversationState('idle');
+        queueAnimation('idle', true);
+      },
       blink: () => queueAnimation('blink'),
-      talking: () => queueAnimation('talking', true),
-      thinking: () => queueAnimation('thinking', true),
-      listening: () => queueAnimation('listening', true),
+      talking: () => {
+        setConversationState('speaking');
+        queueAnimation('talking', true);
+      },
+      thinking: () => {
+        setConversationState('thinking');
+        queueAnimation('thinking', true);
+      },
+      listening: () => {
+        setConversationState('listening');
+        queueAnimation('listening', true);
+      },
       nod: () => queueAnimation('nod'),
-      headTilt: () => queueAnimation('headTilt')
+      headTilt: () => queueAnimation('headTilt'),
+      // Add new methods for UI element awareness
+      lookAt: (elementId) => {
+        try {
+          const element = document.getElementById(elementId);
+          if (element && splineRef.current) {
+            const rect = element.getBoundingClientRect();
+            const direction = (rect.left + rect.width/2) > window.innerWidth/2 ? 'lookRight' : 'lookLeft';
+            queueAnimation(direction, true);
+          }
+        } catch (e) {
+          console.error("Error in lookAt function:", e);
+        }
+      },
+      setConversationState: (state) => {
+        setConversationState(state);
+      }
     };
     
     // Indicate when Spline is ready
@@ -390,7 +452,10 @@ export function SplineSceneBasic() {
           
           {splineLoaded && pageReady && (
             <div className="absolute bottom-4 right-4 z-20 w-60 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border border-slate-800">
-              <Simon splineRef={splineRef} />
+              <Simon 
+                splineRef={splineRef} 
+                onStateChange={(state) => setConversationState(state)}
+              />
             </div>
           )}
         </div>
