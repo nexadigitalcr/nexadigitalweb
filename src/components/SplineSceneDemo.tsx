@@ -18,6 +18,7 @@ export function SplineSceneBasic() {
   const lastAnimationRef = useRef('idle');
   const animationQueue = useRef([]);
   const [conversationState, setConversationState] = useState('idle'); // idle, listening, speaking
+  const availableAnimationsRef = useRef([]);
 
   // Track mouse position for responsive character movement
   useEffect(() => {
@@ -118,6 +119,84 @@ export function SplineSceneBasic() {
     };
   }, []);
 
+  // Function to discover available animations in the Spline scene
+  const discoverAnimations = (spline) => {
+    try {
+      // Common animation names to check
+      const animationNames = [
+        'idle', 'blink', 'talking', 'thinking', 'listening', 
+        'nod', 'headTilt', 'lookLeft', 'lookRight', 'standby',
+        'speak', 'mouth', 'talk', 'process', 'listen', 'attentive',
+        'agree', 'headNod', 'tilt', 'look', 'facial_movement',
+        'lookDirection', 'turnHead', 'lookAround',
+        // Try more animation names that might be in the model
+        'face', 'head', 'eyes', 'smile', 'frown', 'gesture',
+        'main', 'default', 'start', 'animate', 'animation',
+        'base', 'idle1', 'idle2', 'talk1', 'talk2', 'blink1',
+        'loop', 'cycle', 'active', 'interactive', 'response'
+      ];
+      
+      // Check which animations are available
+      const found = [];
+      animationNames.forEach(name => {
+        try {
+          const obj = spline.findObjectByName(name);
+          if (obj) {
+            found.push(name);
+            console.log(`Found animation: ${name}`);
+          }
+        } catch (e) {
+          // Skip if error finding this animation
+        }
+      });
+      
+      console.log("Available animations:", found);
+      availableAnimationsRef.current = found;
+      return found;
+    } catch (error) {
+      console.error("Error discovering animations:", error);
+      return [];
+    }
+  };
+
+  // Enhanced function to find best animation match
+  const findBestAnimationMatch = (desiredAnimation) => {
+    const availableAnimations = availableAnimationsRef.current;
+    if (!availableAnimations.length) return null;
+    
+    // Direct match
+    if (availableAnimations.includes(desiredAnimation)) {
+      return desiredAnimation;
+    }
+    
+    // Mapping of animation types to potential matches
+    const animationMap = {
+      'idle': ['idle', 'base', 'default', 'main', 'loop', 'cycle', 'idle1', 'idle2'],
+      'talking': ['talking', 'talk', 'speak', 'mouth', 'face', 'talk1', 'talk2', 'response'],
+      'thinking': ['thinking', 'process', 'headTilt', 'lookAround', 'tilt', 'head'],
+      'listening': ['listening', 'listen', 'attentive', 'headTilt', 'headNod', 'ears', 'attention'],
+      'lookLeft': ['lookLeft', 'look', 'turnHead', 'lookDirection', 'head', 'eyes', 'face'],
+      'lookRight': ['lookRight', 'look', 'turnHead', 'lookDirection', 'head', 'eyes', 'face'],
+      'nod': ['nod', 'headNod', 'agree', 'yes', 'head', 'gesture'],
+      'headTilt': ['headTilt', 'tilt', 'look', 'head', 'curious', 'gesture'],
+      'blink': ['blink', 'blink1', 'eyes', 'face', 'facial_movement']
+    };
+    
+    // Find potential matches for the desired animation
+    const potentialMatches = animationMap[desiredAnimation] || [];
+    
+    // Return the first available match
+    for (const match of potentialMatches) {
+      if (availableAnimations.includes(match)) {
+        return match;
+      }
+    }
+    
+    // If no specific match, return the first available animation as fallback
+    console.log(`No match found for ${desiredAnimation}, using fallback: ${availableAnimations[0]}`);
+    return availableAnimations[0];
+  };
+
   // Function to manage animation queue and transitions
   const queueAnimation = (animationName, immediate = false) => {
     if (!splineRef.current) return;
@@ -143,12 +222,26 @@ export function SplineSceneBasic() {
     
     try {
       console.log(`Attempting to play animation: ${animationName}`);
-      const obj = splineRef.current.findObjectByName(animationName);
+      
+      // Find the best matching animation
+      const bestMatch = findBestAnimationMatch(animationName);
+      if (!bestMatch) {
+        console.warn(`No matching animation found for: ${animationName}`);
+        animationQueue.current.shift();
+        
+        // Try next animation in queue
+        if (animationQueue.current.length > 0) {
+          playAnimation(animationQueue.current[0]);
+        }
+        return;
+      }
+      
+      const obj = splineRef.current.findObjectByName(bestMatch);
       
       if (obj) {
-        console.log(`Playing animation: ${animationName}`);
+        console.log(`Playing animation: ${bestMatch} (requested: ${animationName})`);
         splineRef.current.emitEvent('mouseDown', obj);
-        lastAnimationRef.current = animationName;
+        lastAnimationRef.current = bestMatch;
         
         // After animation completes, play next in queue
         // Animation durations are optimized for better responsiveness
@@ -172,17 +265,23 @@ export function SplineSceneBasic() {
             playAnimation(animationQueue.current[0]);
           } else {
             // Default to idle if queue is empty
-            const idleObj = splineRef.current.findObjectByName('idle');
-            if (idleObj && lastAnimationRef.current !== 'idle') {
-              splineRef.current.emitEvent('mouseDown', idleObj);
-              lastAnimationRef.current = 'idle';
+            const idleAnimation = findBestAnimationMatch('idle');
+            if (idleAnimation && lastAnimationRef.current !== idleAnimation) {
+              const idleObj = splineRef.current.findObjectByName(idleAnimation);
+              if (idleObj) {
+                splineRef.current.emitEvent('mouseDown', idleObj);
+                lastAnimationRef.current = idleAnimation;
+              }
             }
           }
         }, animationDurations[animationName] || 1500); // Default reduced from 2000
       } else {
-        console.log(`Animation not found: ${animationName}`);
-        // Try fallback animations
-        handleMissingAnimation(animationName);
+        console.log(`Animation object not found: ${bestMatch}`);
+        // Remove from queue and try next
+        animationQueue.current.shift();
+        if (animationQueue.current.length > 0) {
+          playAnimation(animationQueue.current[0]);
+        }
       }
     } catch (error) {
       console.error(`Error playing animation ${animationName}:`, error);
@@ -194,50 +293,8 @@ export function SplineSceneBasic() {
       }
     }
   };
-  
-  // Handle missing animations gracefully with improved fallbacks
-  const handleMissingAnimation = (animationName) => {
-    if (!splineRef.current) return;
-    
-    // Enhanced map of requested animations to available ones
-    const fallbackMap = {
-      'talking': ['speak', 'mouth', 'talk', 'facial_movement'],
-      'thinking': ['process', 'blink', 'headTilt', 'lookAround'],
-      'listening': ['listen', 'attentive', 'headTilt', 'nod'],
-      'nod': ['agree', 'headNod', 'headTilt', 'facial_movement'],
-      'headTilt': ['tilt', 'look', 'blink', 'facial_movement'],
-      'lookLeft': ['lookDirection', 'turnHead', 'headTilt'],
-      'lookRight': ['lookDirection', 'turnHead', 'headTilt']
-    };
-    
-    const fallbacks = fallbackMap[animationName] || ['blink', 'idle'];
-    
-    // Try each fallback animation
-    for (const fallback of fallbacks) {
-      try {
-        const obj = splineRef.current.findObjectByName(fallback);
-        if (obj) {
-          console.log(`Using fallback animation: ${fallback} for ${animationName}`);
-          splineRef.current.emitEvent('mouseDown', obj);
-          lastAnimationRef.current = fallback;
-          return;
-        }
-      } catch (e) {
-        // Continue to next fallback
-      }
-    }
-    
-    // If all fallbacks fail, remove from queue
-    console.log(`No fallback found for: ${animationName}, removing from queue`);
-    animationQueue.current.shift();
-    
-    // Try next animation in queue
-    if (animationQueue.current.length > 0) {
-      playAnimation(animationQueue.current[0]);
-    }
-  };
 
-  // Enhanced natural idle behaviors with more variability
+  // Enhanced natural idle behaviors with more variability and improved randomness
   const setupNaturalIdleBehavior = () => {
     if (!splineRef.current) return;
     
@@ -246,39 +303,102 @@ export function SplineSceneBasic() {
       clearInterval(animationIntervalRef.current);
     }
     
-    // Set up random idle animations with more variety
+    // More varied idle animation patterns with weighted probabilities
+    const idleAnimations = [
+      { name: 'blink', weight: 50 },
+      { name: 'headTilt', weight: 20 },
+      { name: 'lookLeft', weight: 10 },
+      { name: 'lookRight', weight: 10 },
+      { name: 'nod', weight: 10 }
+    ];
+    
+    // Calculate total weight
+    const totalWeight = idleAnimations.reduce((sum, anim) => sum + anim.weight, 0);
+    
+    // Set up random idle animations with varied intervals
     animationIntervalRef.current = setInterval(() => {
       // Only play idle animations if not in the middle of other animations
       if (animationQueue.current.length === 0 && conversationState === 'idle') {
-        const rand = Math.random();
+        // Use weighted random selection
+        const rand = Math.random() * totalWeight;
+        let weightSum = 0;
         
-        if (rand < 0.5) {
-          // 50% chance to blink
-          queueAnimation('blink');
-        } else if (rand < 0.7) {
-          // 20% chance to do a head tilt
-          queueAnimation('headTilt');
-        } else if (rand < 0.85) {
-          // 15% chance to look toward cursor position
-          const lookDirection = cursorRef.current.x > 0.5 ? 'lookRight' : 'lookLeft';
-          queueAnimation(lookDirection);
-        } else {
-          // 15% chance to do a subtle nod
-          queueAnimation('nod');
+        for (const animation of idleAnimations) {
+          weightSum += animation.weight;
+          if (rand <= weightSum) {
+            queueAnimation(animation.name);
+            break;
+          }
         }
       }
-    }, 2500 + Math.random() * 1500); // More frequent random interval between 2.5-4 seconds
+    }, 2500 + Math.random() * 1500); // Random interval between 2.5-4 seconds
   };
 
-  // React to conversation state changes
+  // Improved function to make Simon look at UI elements
+  const createLookAtFunction = () => {
+    return (elementId) => {
+      try {
+        const element = document.getElementById(elementId);
+        if (element && splineRef.current) {
+          const rect = element.getBoundingClientRect();
+          const elementCenterX = rect.left + rect.width / 2;
+          const windowCenterX = window.innerWidth / 2;
+          
+          // Determine direction based on element position
+          const direction = elementCenterX > windowCenterX ? 'lookRight' : 'lookLeft';
+          
+          // Play immediate look animation
+          queueAnimation(direction, true);
+          
+          // After looking, add a small nod for acknowledgment
+          setTimeout(() => {
+            queueAnimation('nod');
+          }, 800);
+        }
+      } catch (e) {
+        console.error("Error in lookAt function:", e);
+      }
+    };
+  };
+
+  // React to conversation state changes with improved visual feedback
   useEffect(() => {
     if (!splineRef.current) return;
+    
+    console.log(`Conversation state changed to: ${conversationState}`);
     
     // Sync animation with conversation state
     if (conversationState === 'listening') {
       queueAnimation('listening', true);
+      
+      // Occasional blinks while listening to appear more lifelike
+      const blinkInterval = setInterval(() => {
+        if (conversationState === 'listening') {
+          queueAnimation('blink');
+        } else {
+          clearInterval(blinkInterval);
+        }
+      }, 3000);
+      
+      return () => clearInterval(blinkInterval);
     } else if (conversationState === 'speaking') {
       queueAnimation('talking', true);
+      
+      // Mix in occasional head movements while talking for expressiveness
+      const movementInterval = setInterval(() => {
+        if (conversationState === 'speaking') {
+          const rand = Math.random();
+          if (rand < 0.3) {
+            queueAnimation('nod');
+          } else if (rand < 0.5) {
+            queueAnimation('headTilt');
+          }
+        } else {
+          clearInterval(movementInterval);
+        }
+      }, 2500);
+      
+      return () => clearInterval(movementInterval);
     } else if (conversationState === 'thinking') {
       queueAnimation('thinking', true);
     }
@@ -289,78 +409,54 @@ export function SplineSceneBasic() {
     setSplineLoaded(true);
     console.log("Spline scene cargada correctamente");
     
-    // Comprehensive animation discovery
-    const availableAnimations = [];
-    try {
-      // Common animation names to look for
-      const animationNames = [
-        'idle', 'blink', 'talking', 'thinking', 'listening', 
-        'nod', 'headTilt', 'lookLeft', 'lookRight', 'standby',
-        'speak', 'mouth', 'talk', 'process', 'listen', 'attentive',
-        'agree', 'headNod', 'tilt', 'look', 'facial_movement',
-        'lookDirection', 'turnHead', 'lookAround'
-      ];
-      
-      // Check which animations are available
-      animationNames.forEach(name => {
-        const obj = spline.findObjectByName(name);
-        if (obj) {
-          availableAnimations.push(name);
-          console.log(`Found animation: ${name}`);
-        }
-      });
-      
-      console.log("Available animations:", availableAnimations);
-    } catch (error) {
-      console.error("Error discovering animations:", error);
-    }
+    // Discover available animations
+    const availableAnimations = discoverAnimations(spline);
+    console.log("Available animations:", availableAnimations);
     
     // Activate initial animation sequence with transitions
     try {
       // Start with idle as base state
-      const idleObj = spline.findObjectByName('idle');
-      if (idleObj) {
-        console.log("Activando animación inicial 'idle'");
-        spline.emitEvent('mouseDown', idleObj);
-        lastAnimationRef.current = 'idle';
-        
-        // Then do a blink to show life
-        setTimeout(() => {
-          const blinkObj = spline.findObjectByName('blink');
-          if (blinkObj) {
-            spline.emitEvent('mouseDown', blinkObj);
-            console.log("Blinking to show liveliness");
-          }
-        }, 800); // Reduced from 1000ms
-        
-        // Then do a subtle head movement
-        setTimeout(() => {
-          const headTiltObj = spline.findObjectByName('headTilt') || 
-                            spline.findObjectByName('lookLeft') ||
-                            spline.findObjectByName('tilt');
-          if (headTiltObj) {
-            spline.emitEvent('mouseDown', headTiltObj);
-            console.log("Subtle head movement");
-          }
-        }, 1500); // Reduced from 2000ms
-        
-        // Return to idle
-        setTimeout(() => {
+      const idleAnimation = findBestAnimationMatch('idle');
+      if (idleAnimation) {
+        const idleObj = spline.findObjectByName(idleAnimation);
+        if (idleObj) {
+          console.log(`Activando animación inicial '${idleAnimation}'`);
           spline.emitEvent('mouseDown', idleObj);
-        }, 2300); // Reduced from 3000ms
-      } else {
-        console.log("No se encontró la animación 'idle'");
-        
-        // Try alternate animation objects if available
-        for (const anim of availableAnimations) {
-          const obj = spline.findObjectByName(anim);
-          if (obj) {
-            console.log(`Activando animación alternativa '${anim}'`);
-            spline.emitEvent('mouseDown', obj);
-            lastAnimationRef.current = anim;
-            break;
-          }
+          lastAnimationRef.current = idleAnimation;
+          
+          // Then do a blink to show life
+          setTimeout(() => {
+            const blinkAnimation = findBestAnimationMatch('blink');
+            if (blinkAnimation) {
+              const blinkObj = spline.findObjectByName(blinkAnimation);
+              if (blinkObj) {
+                spline.emitEvent('mouseDown', blinkObj);
+                console.log("Blinking to show liveliness");
+              }
+            }
+          }, 800);
+          
+          // Then do a subtle head movement
+          setTimeout(() => {
+            const headTiltAnimation = findBestAnimationMatch('headTilt');
+            if (headTiltAnimation) {
+              const headTiltObj = spline.findObjectByName(headTiltAnimation);
+              if (headTiltObj) {
+                spline.emitEvent('mouseDown', headTiltObj);
+                console.log("Subtle head movement");
+              }
+            }
+          }, 1500);
+          
+          // Return to idle
+          setTimeout(() => {
+            spline.emitEvent('mouseDown', idleObj);
+          }, 2300);
+        } else {
+          console.log(`No se encontró la animación '${idleAnimation}'`);
         }
+      } else {
+        console.log("No suitable idle animation found");
       }
       
       // Setup natural idle behaviors with random animations
@@ -369,7 +465,10 @@ export function SplineSceneBasic() {
       console.error("Error al activar animación inicial:", error);
     }
     
-    // Expose animation functions to the window with enhanced state awareness
+    // Create improved lookAt function
+    const lookAtFunction = createLookAtFunction();
+    
+    // Expose enhanced animation functions to the window with better state awareness
     window.simonAnimations = {
       playAnimation: (name, immediate) => queueAnimation(name, immediate),
       idle: () => {
@@ -391,22 +490,24 @@ export function SplineSceneBasic() {
       },
       nod: () => queueAnimation('nod'),
       headTilt: () => queueAnimation('headTilt'),
-      // Add new methods for UI element awareness
-      lookAt: (elementId) => {
-        try {
-          const element = document.getElementById(elementId);
-          if (element && splineRef.current) {
-            const rect = element.getBoundingClientRect();
-            const direction = (rect.left + rect.width/2) > window.innerWidth/2 ? 'lookRight' : 'lookLeft';
-            queueAnimation(direction, true);
-          }
-        } catch (e) {
-          console.error("Error in lookAt function:", e);
+      // Enhanced lookAt function for UI element awareness
+      lookAt: lookAtFunction,
+      // Enhanced function to make Simon follow cursor with his gaze
+      followCursor: (enabled) => {
+        if (enabled) {
+          const cursorInterval = setInterval(() => {
+            const direction = cursorRef.current.x > 0.5 ? 'lookRight' : 'lookLeft';
+            queueAnimation(direction, false);
+          }, 1000);
+          return () => clearInterval(cursorInterval);
         }
       },
+      // Set conversation state with visual feedback
       setConversationState: (state) => {
         setConversationState(state);
-      }
+      },
+      // Get list of available animations for debugging
+      getAvailableAnimations: () => [...availableAnimationsRef.current]
     };
     
     // Indicate when Spline is ready
@@ -427,7 +528,7 @@ export function SplineSceneBasic() {
         {/* Left content */}
         <div className="flex-1 p-8 relative z-10 flex flex-col justify-center">
           {welcomeVisible && (
-            <div className="animate-fade-in">
+            <div id="welcomeMessage" className="animate-fade-in">
               <h1 className="text-6xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-neutral-50 to-neutral-400">
                 NEXA DIGITAL
               </h1>
@@ -451,7 +552,7 @@ export function SplineSceneBasic() {
           />
           
           {splineLoaded && pageReady && (
-            <div className="absolute bottom-4 right-4 z-20 w-60 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border border-slate-800">
+            <div id="simonInterface" className="absolute bottom-4 right-4 z-20 w-60 bg-black/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden border border-slate-800">
               <Simon 
                 splineRef={splineRef} 
                 onStateChange={(state) => setConversationState(state)}
