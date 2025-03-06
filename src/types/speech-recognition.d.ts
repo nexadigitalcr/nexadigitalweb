@@ -74,8 +74,14 @@ interface SimonAnimations {
   // Enhanced methods for user interaction
   lookAt: (elementId: string) => void;
   
+  // New method for cursor following
+  followCursor: (enabled: boolean) => (() => void) | undefined;
+  
   // State management
   setConversationState: (state: string) => void;
+  
+  // Utility method to get available animations
+  getAvailableAnimations: () => string[];
 }
 
 // Enhanced ChatMessage interface for better context handling
