@@ -1,3 +1,4 @@
+
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -38,12 +39,12 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
   const [speechProgress, setSpeechProgress] = useState(0);
   
   // Update status setter to also call onStateChange prop
-  const setStatusWithCallback = (newStatus: 'idle' | 'listening' | 'processing' | 'speaking') => {
+  const setStatusWithCallback = useCallback((newStatus: 'idle' | 'listening' | 'processing' | 'speaking') => {
     setStatus(newStatus);
     if (onStateChange) {
       onStateChange(newStatus);
     }
-  };
+  }, [onStateChange]);
   
   // Refs
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -60,6 +61,8 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
   const consecutiveSilencesRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const lastStreamProcessTimeRef = useRef<number>(0);
+  const pendingResponseRef = useRef<boolean>(false);
 
   // Main conversation context
   const conversationContext = useRef<ChatMessage[]>([
@@ -90,14 +93,14 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
     }
   }, [status]);
 
-  // Page load detection
+  // Page load detection - optimized to respond faster
   useEffect(() => {
-    // Wait for page to fully load before interacting
+    // Wait for page to fully load before interacting - reduced delay
     if (document.readyState === 'complete') {
-      setTimeout(() => setPageFullyLoaded(true), 1500);
+      setPageFullyLoaded(true);
     } else {
       window.addEventListener('load', () => {
-        setTimeout(() => setPageFullyLoaded(true), 1500);
+        setPageFullyLoaded(true);
       });
     }
 
@@ -106,7 +109,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
     };
   }, []);
 
-  // Improved silence detection with better parameters
+  // Improved silence detection with optimized parameters - FIX #3
   const detectSilence = useCallback(() => {
     if (!isListening || isSpeaking) return;
     
@@ -117,45 +120,45 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
     // Calculate time since last user input
     const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
     
-    // Dynamically adjust silence threshold based on conversation context
-    const silenceThreshold = userSpeaking ? 1500 : 800; // Longer if user was just speaking
+    // Dynamic silence threshold adjustment - REDUCED WAIT TIMES
+    const silenceThreshold = userSpeaking ? 1200 : 700; // Reduced from 1500/800ms
     
     // If no audio activity for the threshold time, consider the user finished speaking
     silenceTimeoutRef.current = window.setTimeout(() => {
-      if (lastAudioLevelRef.current < 0.05) { // Increased threshold for better detection
+      if (lastAudioLevelRef.current < 0.06) { // Slightly increased threshold for better detection
         if (userSpeaking) {
           console.log("Silence detected, user stopped speaking");
           setUserSpeaking(false);
           
-          // If recognition is still running, stop it to process what was said
+          // If recognition is still running, stop it to process what was said - IMMEDIATE PROCESSING
           if (recognitionRef.current) {
             try {
-              // Small delay to catch trailing words
+              // Reduced delay to capture trailing words - faster response
               setTimeout(() => {
                 recognitionRef.current?.stop();
-              }, 250);
+              }, 150); // Reduced from 250ms
             } catch (error) {
               console.error("Error stopping recognition on silence", error);
-              // Attempt recovery
+              // Attempt recovery with minimal delay
               startListening();
             }
           }
           // Reset consecutive silences when user speaks
           consecutiveSilencesRef.current = 0;
-        } else if (timeSinceLastInput > 5000) {
-          // If no input for a while, increment consecutive silences
+        } else if (timeSinceLastInput > 3000) { // Reduced from 5000ms - FIX #2
+          // If no input for a shorter while, increment consecutive silences
           consecutiveSilencesRef.current += 1;
           
-          // After 3 consecutive silences, return to idle to save resources
-          if (consecutiveSilencesRef.current >= 3) {
+          // After 2 consecutive silences (reduced from 3), return to idle to save resources - FIX #3
+          if (consecutiveSilencesRef.current >= 2) {
             console.log("Multiple consecutive silences detected, returning to idle");
             triggerAnimation('idle');
             
-            // Every 3rd silence, restart listening to refresh connection
+            // Every 2nd silence (reduced from 3rd), restart listening to refresh connection
             if (recognitionRef.current) {
               try {
                 recognitionRef.current.stop();
-                setTimeout(() => startListening(), 300);
+                setTimeout(() => startListening(), 200); // Reduced from 300ms
               } catch (error) {
                 console.error("Error restarting recognition", error);
               }
@@ -169,7 +172,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
     }, silenceThreshold);
   }, [isListening, isSpeaking, userSpeaking]);
 
-  // Audio level monitoring with improved frequency
+  // Audio level monitoring with higher frequency for faster response
   const setupAudioLevelMonitoring = useCallback(async () => {
     try {
       // Clean up any existing monitoring
@@ -202,7 +205,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
       const bufferLength = analyserRef.current.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
       
-      // Check audio levels more frequently (50ms instead of animation frame)
+      // Check audio levels even more frequently (30ms for faster response) - FIX #2
       audioLevelCheckIntervalRef.current = window.setInterval(() => {
         if (!analyserRef.current) return;
         
@@ -217,7 +220,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         lastAudioLevelRef.current = average;
         
         // Detect if user is speaking (audio level above threshold)
-        if (average > 0.08) { // Increased from 0.05 for better detection
+        if (average > 0.08) {
           if (!userSpeaking && !isSpeaking) {
             console.log("User started speaking", average);
             setUserSpeaking(true);
@@ -246,7 +249,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         
         // Use the silence detection
         detectSilence();
-      }, 50); // Check every 50ms instead of animation frame
+      }, 30); // Check every 30ms instead of 50ms for faster response - FIX #2
       
       return stream;
     } catch (error) {
@@ -255,11 +258,11 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
     }
   }, [detectSilence, isSpeaking]);
 
-  // Comprobar y solicitar permisos de micrófono - mejorado para ser más rápido
+  // Simplified microphone permission request with faster init
   const requestMicrophonePermission = useCallback(async () => {
     try {
       console.log("Solicitando permisos de micrófono");
-      toast.info("Conectando micrófono...", { duration: 2000 });
+      toast.info("Conectando micrófono...", { duration: 1500 }); // Reduced from 2000ms
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -269,7 +272,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         } 
       });
       
-      // Setup audio level monitoring using new method
+      // Setup audio level monitoring using new method - with faster interval
       await setupAudioLevelMonitoring();
       
       // Cerrar el stream para liberar el micrófono para el reconocimiento de voz
@@ -279,7 +282,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         // Only keep the track we need for analysis
         setTimeout(() => {
           track.stop();
-        }, 300);
+        }, 200); // Reduced from 300ms for faster init
       }
       
       setMicPermissionGranted(true);
@@ -317,12 +320,12 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
       setProcessingInput(false);
       setStatusWithCallback('idle');
       
-      // Small delay before starting to listen again
+      // Smaller delay before starting to listen again for better responsiveness - FIX #2
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
           startListening();
         }
-      }, 400); // Slightly longer delay for better rhythm
+      }, 300); // Reduced from 400ms
     };
     
     audioRef.current.onerror = (e) => {
@@ -334,7 +337,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
       setStatusWithCallback('idle');
     };
     
-    // Inicialización al cargar el componente
+    // Inicialización al cargar el componente - FASTER INIT
     const initializeSimon = async () => {
       if (!initialized && pageFullyLoaded) {
         console.log("Inicializando Simón");
@@ -348,18 +351,18 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
           if (hasPermission) {
             setInitialized(true);
             
-            // Preload common responses in the background
+            // Preload common responses in the background - reduced delay
             setTimeout(() => {
               preloadCommonResponses(ELEVENLABS_VOICE_ID, ELEVENLABS_API_KEY)
                 .then(() => console.log("Preloaded common responses"))
                 .catch(err => console.error("Error preloading responses:", err));
-            }, 2000);
+            }, 1500); // Reduced from 2000ms
             
             setTimeout(() => {
               playResponse(welcomeMessage);
-            }, 800);
+            }, 500); // Reduced from 800ms
           }
-        }, 1000);
+        }, 500); // Reduced from 1000ms
       }
     };
     
@@ -417,17 +420,42 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
     };
   }, [requestMicrophonePermission, pageFullyLoaded, initialized, micPermissionGranted, isListening]);
 
-  // Cuando termine de hablar, inicia la escucha - con mejor manejo de estados
+  // Start listening after speaking - with reduced delay for faster response - FIX #2
   useEffect(() => {
     if (initialized && !isSpeaking && !isListening && micPermissionGranted && !processingInput) {
       console.log("Iniciando escucha después de hablar");
       const timer = setTimeout(() => {
         startListening();
-      }, 350); // Slightly increased from 300ms for better natural flow
+      }, 250); // Reduced from 350ms for better responsiveness
       
       return () => clearTimeout(timer);
     }
   }, [initialized, isSpeaking, isListening, micPermissionGranted, processingInput]);
+
+  // FIX #1 - New effect to prevent response duplication by ensuring streaming response is processed only once
+  useEffect(() => {
+    if (partialResponse && !pendingResponseRef.current && !isSpeaking) {
+      console.log("Processing new streaming response");
+      pendingResponseRef.current = true;
+      
+      // Debounce to prevent multiple rapid calls and ensure complete response
+      const now = Date.now();
+      if (now - lastStreamProcessTimeRef.current > 1000) {
+        lastStreamProcessTimeRef.current = now;
+        
+        // Small delay to collect full streaming response
+        setTimeout(() => {
+          if (streamingResponseRef.current) {
+            console.log("Using final streaming response:", streamingResponseRef.current);
+            playResponse(streamingResponseRef.current);
+            streamingResponseRef.current = null;
+            setPartialResponse(null);
+          }
+          pendingResponseRef.current = false;
+        }, 300);
+      }
+    }
+  }, [partialResponse, isSpeaking]);
 
   const triggerAnimation = useCallback((animationName: string) => {
     if (window.simonAnimations && window.simonAnimations[animationName]) {
@@ -481,7 +509,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
       console.log("No hay permiso de micrófono, solicitando...");
       requestMicrophonePermission().then(granted => {
         if (granted) {
-          setTimeout(() => startListening(), 300);
+          setTimeout(() => startListening(), 200); // Reduced from 300ms
         }
       });
       return;
@@ -531,9 +559,8 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
           lastUserInputTimeRef.current = Date.now();
         }
         
-        // Process final results when there's meaningful content
-        // Added minimum length check of 3 characters to avoid processing too short inputs
-        if (event.results[0].isFinal && currentTranscript.trim().length > 3) {
+        // Process final results when there's meaningful content - REDUCED LENGTH CHECK for faster response - FIX #2
+        if (event.results[0].isFinal && currentTranscript.trim().length > 2) { // Reduced from 3 characters
           processSpeech(currentTranscript);
           // Only stop if we actually process the speech
           recognitionRef.current?.stop();
@@ -549,10 +576,10 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         if (event.error === 'not-allowed') {
           toast.error("Permiso de micrófono denegado");
           setMicPermissionGranted(false);
-          setTimeout(() => requestMicrophonePermission(), 2000);
+          setTimeout(() => requestMicrophonePermission(), 1500); // Reduced from 2000ms
         } else if (event.error === 'audio-capture') {
           toast.error("No se pudo capturar audio");
-          setTimeout(() => requestMicrophonePermission(), 1500);
+          setTimeout(() => requestMicrophonePermission(), 1000); // Reduced from 1500ms
         } else if (event.error === 'no-speech') {
           console.log("No se detectó voz, reiniciando...");
           if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
@@ -560,14 +587,14 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
             if (!isSpeaking && micPermissionGranted && !processingInput) {
               startListening();
             }
-          }, 400); // Increased from 300ms
+          }, 300); // Reduced from 400ms
         } else {
           if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
           retryTimeoutRef.current = window.setTimeout(() => {
             if (!isSpeaking && micPermissionGranted && !processingInput) {
               startListening();
             }
-          }, 600); // Increased from 500ms
+          }, 400); // Reduced from 600ms
         }
       };
 
@@ -586,7 +613,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
             console.log("Reiniciando escucha automáticamente");
             startListening();
           }
-        }, 400); // Increased from 300ms
+        }, 300); // Reduced from 400ms
       };
 
       console.log("Iniciando reconocimiento de voz");
@@ -600,20 +627,23 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         if (!isSpeaking && micPermissionGranted && !processingInput) {
           startListening();
         }
-      }, 1000);
+      }, 800); // Reduced from 1000ms
     }
   }, [isSpeaking, micPermissionGranted, processingInput, requestMicrophonePermission, triggerAnimation, isListening]);
 
-  // Handle streaming response updates
+  // Improved streaming response handler to avoid duplications - FIX #1
   const handleStreamingResponse = useCallback((partialText: string) => {
-    streamingResponseRef.current = partialText;
-    setPartialResponse(partialText);
-    
-    // Update animation to show thinking or talking based on content
-    if (partialText && partialText.length > 0) {
-      if (status !== 'speaking') {
-        triggerAnimation('talking');
-        setStatusWithCallback('speaking');
+    // Only update if the text has changed to avoid duplication
+    if (partialText !== streamingResponseRef.current) {
+      streamingResponseRef.current = partialText;
+      setPartialResponse(partialText);
+      
+      // Update animation to show thinking or talking based on content
+      if (partialText && partialText.length > 0) {
+        if (status !== 'speaking') {
+          triggerAnimation('talking');
+          setStatusWithCallback('speaking');
+        }
       }
     }
   }, [status, triggerAnimation]);
@@ -626,6 +656,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
     setUserSpeaking(false);
     streamingResponseRef.current = null;
     setPartialResponse(null);
+    pendingResponseRef.current = false; // Reset pending state - FIX #1
     
     try {
       triggerAnimation('thinking');
@@ -668,6 +699,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         // Use final response instead of partial one
         streamingResponseRef.current = null;
         setPartialResponse(null);
+        pendingResponseRef.current = false; // Reset pending state - FIX #1
         
         playResponse(continuedResponse);
       } else {
@@ -685,6 +717,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         // Use final response instead of partial one
         streamingResponseRef.current = null;
         setPartialResponse(null);
+        pendingResponseRef.current = false; // Reset pending state - FIX #1
         
         playResponse(aiResponse);
       }
@@ -695,12 +728,13 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
       setStatusWithCallback('idle');
       streamingResponseRef.current = null;
       setPartialResponse(null);
+      pendingResponseRef.current = false; // Reset pending state - FIX #1
       
       setTimeout(() => {
         if (!isListening && micPermissionGranted) {
           startListening();
         }
-      }, 500);
+      }, 400); // Reduced from 500ms
     }
   }, [triggerAnimation, handleStreamingResponse]);
 
@@ -716,7 +750,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         if (!isListening && micPermissionGranted) {
           startListening();
         }
-      }, 300);
+      }, 200); // Reduced from 300ms
       return;
     }
     
@@ -773,7 +807,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
           // Pre-buffer before playing
           audioRef.current.load();
           
-          // Short delay to allow buffering
+          // Short delay to allow buffering - REDUCED FOR FASTER RESPONSE
           setTimeout(() => {
             const playPromise = audioRef.current?.play();
             
@@ -806,11 +840,11 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
                     if (!isListening && micPermissionGranted) {
                       startListening();
                     }
-                  }, 800);
+                  }, 500); // Reduced from 800ms
                 }
               });
             }
-          }, 100);
+          }, 50); // Reduced from 100ms
         } catch (error) {
           console.error("Error crítico al reproducir:", error);
           setIsSpeaking(false);
@@ -823,7 +857,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
             if (!isListening && micPermissionGranted) {
               startListening();
             }
-          }, 800);
+          }, 500); // Reduced from 800ms
         }
       } else {
         console.error("No se pudo obtener audio");
@@ -837,7 +871,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
           if (!isListening && micPermissionGranted) {
             startListening();
           }
-        }, 800);
+        }, 500); // Reduced from 800ms
       }
     } catch (error) {
       console.error('Error al reproducir respuesta:', error);
@@ -851,7 +885,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         if (!isListening && micPermissionGranted) {
           startListening();
         }
-      }, 800);
+      }, 500); // Reduced from 800ms
     }
   }, [muted, triggerAnimation, micPermissionGranted, isListening]);
 
@@ -867,7 +901,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         setInitialized(true);
         setTimeout(() => {
           playResponse(welcomeMessage);
-        }, 500);
+        }, 300); // Reduced from 500ms
       }
     } else if (!isListening && !isSpeaking && !processingInput) {
       // Reset session if needed
@@ -891,7 +925,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
         // Small delay before starting to listen
         setTimeout(() => {
           startListening();
-        }, 400); // Increased from 300ms
+        }, 300); // Reduced from 400ms
       }
     }
   }, [initialized, isListening, isSpeaking, processingInput, playResponse, requestMicrophonePermission, startListening, welcomeMessage, pageFullyLoaded]);
@@ -911,7 +945,7 @@ export function Simon({ splineRef, onStateChange }: SimonProps) {
           if (!isListening && micPermissionGranted) {
             startListening();
           }
-        }, 400); // Increased from 300ms
+        }, 300); // Reduced from 400ms
       }
     }
     toast.info(muted ? "Audio activado" : "Audio silenciado", { duration: 1500 });
