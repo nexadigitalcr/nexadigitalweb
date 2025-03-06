@@ -46,7 +46,8 @@ function addToRecentMessages(message: string): void {
 export async function generateChatResponse(
   messages: ChatMessage[], 
   apiKey: string, 
-  onPartialResponse?: (text: string) => void
+  onPartialResponse?: (text: string) => void,
+  retryCount: number = 0
 ): Promise<string> {
   try {
     // Get the last user message
@@ -85,6 +86,15 @@ export async function generateChatResponse(
     if (!response.ok || !response.body) {
       const errorData = await response.json();
       console.error('OpenAI API error:', errorData);
+      
+      // Retry logic for temporary failures - FIX #3
+      if (retryCount < 2) {
+        console.log(`Retrying OpenAI call, attempt ${retryCount + 1}...`);
+        // Add exponential backoff delay based on retry count
+        await new Promise(resolve => setTimeout(resolve, retryCount * 500));
+        return generateChatResponse(messages, apiKey, onPartialResponse, retryCount + 1);
+      }
+      
       throw new Error(errorData.error?.message || 'Error generating response');
     }
 
@@ -93,46 +103,78 @@ export async function generateChatResponse(
     const decoder = new TextDecoder();
     let resultText = '';
     let streamStarted = false;
+    let lastResponseChunk = ""; // Track last chunk to prevent duplication - FIX #1
 
-    // Set a timeout for slow responses - reduced from 3s to 1.5s
+    // Set a timeout for slow responses - reduced from 1.5s to 1s - FIX #2
     const responseTimeout = setTimeout(() => {
       if (!streamStarted) {
-        // If no response after 1.5 seconds, provide feedback and trigger callback
+        // If no response after 1 second, provide feedback and trigger callback
         const feedbackText = "Un momento... estoy pensando.";
         if (onPartialResponse) onPartialResponse(feedbackText);
         streamStarted = true;
         console.log("Response timeout triggered");
       }
-    }, 1500);
+    }, 1000);
 
     try {
+      let consecutiveEmptyChunks = 0; // Track empty responses for improved stability
+      
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        
+        if (done) {
+          // If we're done but got no text, provide a fallback response - FIX #3
+          if (resultText.length === 0) {
+            console.log("Stream ended with no content, providing fallback response");
+            resultText = "Parece que tuve problemas para responder. ¿Podrías reformular tu pregunta?";
+          }
+          break;
+        }
 
         const decodedValue = decoder.decode(value, { stream: true });
-        const jsonChunks = decodedValue.split("\n").filter(line => line.startsWith("data: ") && line !== "data: [DONE]");
+        const jsonChunks = decodedValue.split("\n").filter(line => 
+          line.startsWith("data: ") && line !== "data: [DONE]"
+        );
+        
+        if (jsonChunks.length === 0) {
+          consecutiveEmptyChunks++;
+          // If we get too many empty chunks, break the loop to avoid hanging - FIX #3
+          if (consecutiveEmptyChunks > 5) {
+            console.log("Too many empty chunks, ending stream processing");
+            break;
+          }
+          continue;
+        } else {
+          consecutiveEmptyChunks = 0; // Reset counter when we get valid chunks
+        }
         
         for (const chunk of jsonChunks) {
           try {
             const jsonData = JSON.parse(chunk.replace("data: ", "").trim());
             if (jsonData.choices && jsonData.choices[0].delta.content) {
               const newContent = jsonData.choices[0].delta.content;
-              resultText += newContent;
               
-              // Trigger callback with intermediate results for real-time UI updates
-              if (onPartialResponse) {
-                onPartialResponse(resultText);
-              }
-              
-              // Mark stream as started once we get content
-              if (!streamStarted) {
-                streamStarted = true;
-              }
-              
-              // Cancel timeout once we start getting content
-              if (responseTimeout) {
-                clearTimeout(responseTimeout);
+              // Only process if this is new content to prevent duplication - FIX #1
+              if (newContent !== lastResponseChunk) {
+                resultText += newContent;
+                lastResponseChunk = newContent;
+                
+                // Trigger callback with intermediate results for real-time UI updates
+                if (onPartialResponse) {
+                  onPartialResponse(resultText);
+                }
+                
+                // Mark stream as started once we get content
+                if (!streamStarted) {
+                  streamStarted = true;
+                }
+                
+                // Cancel timeout once we start getting content
+                if (responseTimeout) {
+                  clearTimeout(responseTimeout);
+                }
+              } else {
+                console.log("Duplicate content detected, skipping:", newContent);
               }
             }
           } catch (error) {
@@ -146,6 +188,15 @@ export async function generateChatResponse(
       if (resultText.length > 0) {
         return resultText;
       }
+      
+      // Retry on stream errors - FIX #3
+      if (retryCount < 2) {
+        console.log(`Stream error, retrying attempt ${retryCount + 1}...`);
+        return generateChatResponse(messages, apiKey, onPartialResponse, retryCount + 1);
+      }
+      
+      // Fallback message for stream failures
+      return "Lo siento, tuve problemas para procesar tu solicitud. ¿Podemos intentarlo de nuevo?";
     } finally {
       // Ensure timeout is cleared
       if (responseTimeout) {
@@ -154,9 +205,20 @@ export async function generateChatResponse(
     }
 
     console.log("Complete OpenAI response:", resultText);
-    return resultText;
+    return resultText.length > 0 
+      ? resultText 
+      : "Lo siento, no pude generar una respuesta. ¿Podrías intentar de nuevo?";
   } catch (error) {
     console.error('Error calling OpenAI:', error);
+    
+    // Retry on general errors - FIX #3
+    if (retryCount < 2) {
+      console.log(`Error encountered, retrying attempt ${retryCount + 1}...`);
+      // Add exponential backoff delay based on retry count
+      await new Promise(resolve => setTimeout(resolve, retryCount * 500));
+      return generateChatResponse(messages, apiKey, onPartialResponse, retryCount + 1);
+    }
+    
     toast.error('Error generating AI response');
     return "Lo siento, ha ocurrido un error. Por favor, inténtalo de nuevo.";
   }
