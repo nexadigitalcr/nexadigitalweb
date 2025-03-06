@@ -1,3 +1,4 @@
+
 import { toast } from "sonner";
 
 // Optimized settings for more natural Latin Spanish voice
@@ -11,7 +12,7 @@ const VOICE_SETTINGS = {
 // Improved audio cache with size limit and TTL
 const MAX_CACHE_SIZE = 30; // Increased from 20
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes in milliseconds
-const audioCache = new Map<string, {data: ArrayBuffer, timestamp: number}>();
+const audioCache = new Map<string, {data: ArrayBuffer, timestamp: number, usageCount: number}>();
 
 // Function to clear expired cache entries
 function cleanExpiredCache() {
@@ -26,11 +27,61 @@ function cleanExpiredCache() {
   }
 }
 
+// Fallback responses in case of API failure
+const FALLBACK_RESPONSES: Record<string, ArrayBuffer> = {};
+
+// Stream audio chunks as they arrive to reduce latency
+async function streamAudioResponse(
+  response: Response, 
+  onProgress?: (progress: number) => void
+): Promise<ArrayBuffer> {
+  if (!response.body) {
+    throw new Error('No response body from ElevenLabs');
+  }
+  
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedLength = 0;
+  let startedPlaying = false;
+  
+  if (onProgress) onProgress(60); // Audio generation started
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    
+    if (done) {
+      break;
+    }
+    
+    chunks.push(value);
+    receivedLength += value.length;
+    
+    // When we have enough data to start playing, update progress
+    if (!startedPlaying && chunks.length >= 2) {
+      startedPlaying = true;
+      if (onProgress) onProgress(80);
+    }
+  }
+  
+  // Concatenate chunks into a single ArrayBuffer
+  const resultBuffer = new Uint8Array(receivedLength);
+  let position = 0;
+  
+  for (const chunk of chunks) {
+    resultBuffer.set(chunk, position);
+    position += chunk.length;
+  }
+  
+  if (onProgress) onProgress(95);
+  return resultBuffer.buffer;
+}
+
 export async function textToSpeech(
   text: string, 
   voiceId: string, 
   apiKey: string,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  retryCount = 0
 ): Promise<ArrayBuffer | null> {
   try {
     console.log("Calling ElevenLabs API for voice synthesis");
@@ -79,7 +130,7 @@ export async function textToSpeech(
     });
 
     // Progress update
-    if (onProgress) onProgress(70);
+    if (onProgress) onProgress(50);
 
     if (!response.ok) {
       const errorData = await response.text();
@@ -87,10 +138,8 @@ export async function textToSpeech(
       throw new Error('Error generating speech');
     }
 
-    // Final progress update
-    if (onProgress) onProgress(90);
-
-    const audioData = await response.arrayBuffer();
+    // Use streaming to process audio as it arrives
+    const audioData = await streamAudioResponse(response, onProgress);
     
     console.log("Voice synthesis successful");
     
@@ -103,7 +152,26 @@ export async function textToSpeech(
     return audioData;
   } catch (error) {
     console.error('Error calling ElevenLabs:', error);
+    
+    // Retry logic with exponential backoff
+    if (retryCount < 2) {
+      console.log(`Retrying ElevenLabs call... (Attempt ${retryCount + 1})`);
+      const backoffTime = Math.pow(2, retryCount) * 500; // 500ms, 1000ms
+      
+      await new Promise(resolve => setTimeout(resolve, backoffTime));
+      return textToSpeech(text, voiceId, apiKey, onProgress, retryCount + 1);
+    }
+    
     toast.error('Error generating voice');
+    
+    // Try to get a fallback response
+    const fallbackMessage = "Disculpa, hay un problema con mi voz.";
+    const fallbackAudio = getCachedAudio(fallbackMessage);
+    
+    if (fallbackAudio) {
+      return fallbackAudio;
+    }
+    
     return null;
   }
 }
@@ -111,16 +179,25 @@ export async function textToSpeech(
 export function cacheAudio(text: string, audioData: ArrayBuffer) {
   console.log("Saving audio to cache");
   
-  // Remove oldest entries if cache is too large
+  // Remove least used entries if cache is too large
   if (audioCache.size >= MAX_CACHE_SIZE) {
-    const oldestKey = [...audioCache.entries()]
-      .sort((a, b) => a[1].timestamp - b[1].timestamp)[0][0];
-    audioCache.delete(oldestKey);
+    // Sort based on usage count first, then timestamp for ties
+    const sortedEntries = [...audioCache.entries()]
+      .sort((a, b) => {
+        if (a[1].usageCount === b[1].usageCount) {
+          return a[1].timestamp - b[1].timestamp;
+        }
+        return a[1].usageCount - b[1].usageCount;
+      });
+    
+    // Remove the least used entry
+    audioCache.delete(sortedEntries[0][0]);
   }
   
   audioCache.set(text, {
     data: audioData,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    usageCount: 1
   });
 }
 
@@ -130,6 +207,7 @@ export function getCachedAudio(text: string): ArrayBuffer | undefined {
     console.log("Audio found in cache");
     // Update timestamp to keep frequently used responses fresh
     cached.timestamp = Date.now();
+    cached.usageCount++;
     return cached.data;
   }
   return undefined;
@@ -141,6 +219,24 @@ export function clearAudioCache() {
   console.log("Audio cache cleared");
 }
 
+// Store some emergency fallback responses in memory
+export function initializeFallbackResponses(voiceId: string, apiKey: string) {
+  const fallbackPhrases = [
+    "Disculpa, hay un problema con mi voz.",
+    "Un momento, estoy teniendo dificultades técnicas.",
+    "Perdona la interrupción, estoy procesando tu solicitud."
+  ];
+  
+  FALLBACK_RESPONSES["default"] = new ArrayBuffer(0); // Empty buffer as last resort
+  
+  fallbackPhrases.forEach(phrase => {
+    if (getCachedAudio(phrase)) return; // Already cached
+    
+    // Add to pre-cache queue - will be processed in the background
+    preloadCommonResponses(voiceId, apiKey);
+  });
+}
+
 // Pre-buffer common responses for instant playback
 export async function preloadCommonResponses(voiceId: string, apiKey: string) {
   const commonPhrases = [
@@ -148,16 +244,29 @@ export async function preloadCommonResponses(voiceId: string, apiKey: string) {
     "¿Puedes repetir eso, por favor?",
     "No entendí bien, ¿puedes decirlo de otra manera?",
     "Hola, ¿en qué puedo ayudarte?",
-    "Disculpa por la interrupción."
+    "Disculpa por la interrupción.",
+    "Disculpa, hay un problema con mi voz." // Important fallback
   ];
   
-  for (const phrase of commonPhrases) {
+  // Prioritize loading the fallback message first
+  const priorityFirst = [...commonPhrases].sort((a, b) => {
+    if (a.includes("hay un problema")) return -1;
+    if (b.includes("hay un problema")) return 1;
+    return 0;
+  });
+  
+  for (const phrase of priorityFirst) {
     if (!getCachedAudio(phrase)) {
       try {
         const audioData = await textToSpeech(phrase, voiceId, apiKey);
         if (audioData) {
           cacheAudio(phrase, audioData);
           console.log(`Preloaded: "${phrase}"`);
+          
+          // Store essential fallbacks in the emergency collection
+          if (phrase.includes("hay un problema")) {
+            FALLBACK_RESPONSES["default"] = audioData;
+          }
         }
       } catch (error) {
         console.error(`Failed to preload: "${phrase}"`, error);
