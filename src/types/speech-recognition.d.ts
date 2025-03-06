@@ -55,17 +55,47 @@ interface SpeechRecognitionConstructor {
   prototype: SpeechRecognition;
 }
 
+// Enhanced SimonAnimations interface with improved methods for interaction
 interface SimonAnimations {
+  // Core animation methods
   playAnimation: (name: string, immediate?: boolean) => void;
+  
+  // Basic animations
   idle: () => void;
   blink: () => void;
   talking: () => void;
   thinking: () => void;
   listening: () => void;
+  
+  // Interaction animations
   nod: () => void;
   headTilt: () => void;
+  
+  // Enhanced methods for user interaction
   lookAt: (elementId: string) => void;
+  
+  // State management
   setConversationState: (state: string) => void;
+}
+
+// Enhanced ChatMessage interface for better context handling
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  timestamp?: number;
+}
+
+// SimonState type definition for state management
+type SimonState = 'idle' | 'listening' | 'processing' | 'speaking';
+
+// Enhanced SpeechRecognitionOptions to configure speech recognition
+interface SpeechRecognitionOptions {
+  lang?: string;
+  continuous?: boolean;
+  interimResults?: boolean;
+  maxAlternatives?: number;
+  silenceThreshold?: number;
+  responseDelay?: number;
 }
 
 declare global {
@@ -82,5 +112,9 @@ export type {
   SpeechRecognitionErrorEvent,
   SpeechRecognitionResult,
   SpeechRecognitionResultList,
-  SpeechRecognitionAlternative
+  SpeechRecognitionAlternative,
+  SimonAnimations,
+  ChatMessage,
+  SimonState,
+  SpeechRecognitionOptions
 };
